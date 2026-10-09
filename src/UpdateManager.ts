@@ -81,8 +81,8 @@ export class UpdateManager extends Observable<UpdateManager> {
 		private releaseSettings: NamespacedSettings<ReleaseSettings>,
 	) {
 		super("UpdateManager");
-		this.githubReleases = new LocalStorage("system3-relay/releases");
-		this.releaseChannels = new LocalStorage("system3-relay/releaseChannels");
+		this.githubReleases = new LocalStorage("freelay/releases");
+		this.releaseChannels = new LocalStorage("freelay/releaseChannels");
 	}
 
 	public get releases(): Release[] {
@@ -121,7 +121,7 @@ export class UpdateManager extends Observable<UpdateManager> {
 		const response = await customFetch(apiUrl, {
 			headers: {
 				Accept: "application/vnd.github.v3+json",
-				"User-Agent": "Relay-Obsidian-Plugin",
+				"User-Agent": "Freelay-Obsidian-Plugin",
 			},
 		});
 
@@ -140,14 +140,13 @@ export class UpdateManager extends Observable<UpdateManager> {
 
 	private async fetchLatestRelease(): Promise<Release | null> {
 		try {
-			const repoOwner = "No-Instructions";
-			const repoName = "Relay";
+			const [repoOwner,repoName] = REPOSITORY.split("/");
 			const latestUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
 
 			this.debug(`Fetching latest release from: ${latestUrl}`);
 			const response = await customFetch(latestUrl, {
 				headers: {
-					"User-Agent": "Relay-Obsidian-Plugin",
+					"User-Agent": "Freelay-Obsidian-Plugin",
 				},
 			});
 			if (!response.ok) {
@@ -321,8 +320,7 @@ export class UpdateManager extends Observable<UpdateManager> {
 		branch = "main",
 	): Promise<Manifest | null> {
 		try {
-			const repoOwner = "No-Instructions";
-			const repoName = "Relay";
+			const [repoOwner,repoName] = REPOSITORY.split("/");
 			const fileUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}/${path}`;
 
 			this.debug(`Fetching ${fileUrl}`);
@@ -359,7 +357,7 @@ export class UpdateManager extends Observable<UpdateManager> {
 			const response = await customFetch(manifestAsset.browser_download_url, {
 				headers: {
 					Accept: "application/octet-stream",
-					"User-Agent": "Relay-Obsidian-Plugin",
+					"User-Agent": "Freelay-Obsidian-Plugin",
 				},
 			});
 

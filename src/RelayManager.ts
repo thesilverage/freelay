@@ -1,9 +1,6 @@
 "use strict";
 
-import { v4 as uuid } from "uuid";
 import {
-	offeredFolderRoles,
-	offeredRelayRoles,
 	type RelayRole,
 	type FolderRole,
 	type Relay,
@@ -18,16 +15,13 @@ import {
 	type Permission,
 	type Resource,
 } from "./Relay";
-import PocketBase, {
+import {
 	type AuthModel,
 	type ListResult,
-	type RecordFullListOptions,
 	type RecordModel,
-	type RecordSubscription,
-} from "pocketbase";
+} from "./control/Records";
 import { ObservableMap } from "./observable/ObservableMap";
 import { RelayInstances, HasLogging } from "./debug";
-import { customFetch } from "./customFetch";
 import type { LoginManager } from "./LoginManager";
 import type { Unsubscriber } from "svelte/store";
 import { Observable } from "./observable/Observable";
@@ -84,6 +78,7 @@ interface RoleDAO extends RecordModel {
 }
 
 interface RelayDAO extends RecordModel {
+	effectiveRole?: Role;
 	id: string;
 	guid: string;
 	name: string;
@@ -108,6 +103,7 @@ interface ProviderDAO extends RecordModel {
 }
 
 interface RemoteFolderDAO extends RecordModel {
+	effectiveRole?: Role;
 	id: string;
 	guid: string;
 	name: string;
@@ -176,15 +172,6 @@ interface HasRecordSubscription {
 	offRecordSubscription?: Unsubscriber;
 }
 
-function hasRecordSubscription(x: unknown): x is HasRecordSubscription {
-	return (
-		typeof x === "object" &&
-		x !== null &&
-		typeof (x as HasRecordSubscription).id === "string" &&
-		typeof (x as HasRecordSubscription).collectionName === "string" &&
-		"offRecordSubscription" in x
-	);
-}
 
 /**
  * The roles a relay or folder grant can name. They are fixed records on the
@@ -555,6 +542,7 @@ class RemoteFolderAuto
 
 	public get role(): Role {
 		const isCreator = this.remoteFolder.creator === this.user.id;
+		if (this.remoteFolder.effectiveRole) return this.remoteFolder.effectiveRole;
 		const relayRole = this.relayRoles.find(
 			(role) => role.relayId === this.relay.id && role.userId === this.user.id,
 		)?.role;
@@ -1481,6 +1469,7 @@ class RelayAuto
 
 	public get role(): Role {
 		const isCreator = this.relay.creator === this.user.id;
+		if (this.relay.effectiveRole) return this.relay.effectiveRole;
 		const role = this.relayRoles.find(
 			(role) => role.relayId === this.relay.id && role.userId === this.user.id,
 		)?.role;
@@ -1571,16 +1560,13 @@ export class RelayManager extends HasLogging {
 	// for this user on the folder is ingested the creator stands in for it.
 	private pendingCreatorGrants = new Set<string>();
 	private _offFolderRoles?: () => void;
-	private pb: PocketBase | null;
 	destroyed = false;
-	private getProfileFileUrl: ProfileFileUrl = (record, filename, options) =>
-		this.pb?.files.getUrl(record, filename, options) || "";
+	private getProfileFileUrl: ProfileFileUrl = () => "";
 	private getStreamerMode = () =>
 		FeatureFlagManager.getInstance().getFlag("enableStreamerMode");
 
 	constructor(private loginManager: LoginManager) {
 		super();
-		this.pb = this.loginManager.pb;
 
 		// Build the NodeLists
 		this.users = new ObservableMap<string, RelayUser>("users");
@@ -1635,10 +1621,6 @@ export class RelayManager extends HasLogging {
 
 	buildGraph() {
 		if (!this.user) {
-			return;
-		}
-		if (!this.pb) {
-			console.warn("no pb!");
 			return;
 		}
 		if (this.store) {
@@ -1739,7 +1721,8 @@ export class RelayManager extends HasLogging {
 	}
 
 	setUser() {
-		this.authUser = this.pb?.authStore.model;
+		const profile = this.loginManager.profile;
+		this.authUser = profile ? {id: profile.id, name: profile.name || this.loginManager.user?.name, email: "", collectionId: "users", collectionName: "users", created: "", updated: ""} : null;
 		if (this.authUser) {
 			const authUser = this.authUser as UserDAO;
 			if (this.user?.id === authUser.id) {
@@ -1756,22 +1739,19 @@ export class RelayManager extends HasLogging {
 	}
 
 	login() {
-		if (this.authUser && this.authUser == this.pb?.authStore.model) {
-			return;
-		}
 		this.setUser();
 		this.buildGraph();
+		this.client.onPolicyDenied = () => { void this.update().catch(() => undefined); };
 		void this.subscribe();
-		void this.update();
+		void this.update().catch(() => undefined);
 	}
 
 	logout() {
+		this.snapshot = undefined;
+		this.authUser = null;
 		this.store?.clear();
 		this.user = undefined;
 		this.store = undefined;
-		// LoginManager.logout() calls pb.realtime.unsubscribe() which wipes
-		// the client-side subscription map; clear our flag so the next login
-		// re-registers.
 		this._isSubscribed = false;
 		this._rolesHydrated = false;
 	}
@@ -1780,654 +1760,168 @@ export class RelayManager extends HasLogging {
 		const relayRole = this.relayRoles.find(
 			(role) => role.relayId === relayId && role.userId === userId,
 		)?.role;
-		return offeredFolderRoles(this.roles.values(), relayRole);
+		return this.roles.values().filter(role => role.name !== "Owner" && (relayRole !== "Reader" || role.name === "Reader"));
 	}
 
-	async rotateKey(relayInvitation: RelayInvitation): Promise<RelayInvitation> {
-		if (!this.pb) {
-			throw new Error("missing pocketbase");
-		}
-		return this.pb
-			.send("/api/rotate-key", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ id: relayInvitation.id }),
-			})
-			.then((invitation: RelayInvitationDAO) => {
-				const invite = this.store?.ingest<RelayInvitation>(invitation);
-				if (!invite) {
-					throw new Error("unable to rotate key");
-				}
-				return invite;
-			});
+	get client() {
+		const client = this.loginManager.control;
+		if (!client) throw new Error("Connect to a Freelay server first.");
+		return client;
+	}
+	private snapshot?: import("./control/Client").Snapshot;
+	private refreshPending?: Promise<void>;
+	private poll?: ReturnType<typeof setInterval>;
+	private viewCount = 0;
+
+	/** Only metadata-dependent views request polling; content still uses WS. */
+	watchMetadata(): () => void {
+		this.viewCount++;
+		void this.update().catch(() => undefined);
+		if (!this.poll) this.poll = globalThis.setInterval(() => { void this.update().catch(() => undefined); }, 30000);
+		return () => {
+			this.viewCount--;
+			if (!this.viewCount && this.poll) { globalThis.clearInterval(this.poll); this.poll = undefined; }
+		};
 	}
 
-	async toggleRelayInvitation(
-		relayInvitation: RelayInvitation,
-		value: boolean,
-	): Promise<RelayInvitation> {
-		if (!this.pb) {
-			throw new Error("missing pocketbase");
+	async subscribe(): Promise<void> { /* Snapshots replace PocketBase SSE. */ }
+	offline(): void { /* Cached domain objects remain usable offline. */ }
+	async online(): Promise<void> { if (this.loginManager.loggedIn) await this.update(); }
+	async subscribeRecord(collectionName: string, recordId: string, expand: string[]): Promise<Unsubscriber | undefined> { return undefined; }
+	async refreshRemoteFolder(folder: RemoteFolder): Promise<void> { await this.update(); }
+	async refreshRelay(relay: Relay): Promise<void> { await this.update(); }
+	get rolesHydrated(): boolean { return this._rolesHydrated; }
+	async update(): Promise<void> {
+		if (!this.loginManager.profile?.registered || !this.store || this.destroyed) return;
+		if (!this.refreshPending) {
+			const client = this.client;
+			const store = this.store;
+			this.refreshPending = (async () => {
+				const state = await client.state();
+				if (this.destroyed || this.store !== store || this.loginManager.control !== client) return;
+				this.snapshot = state;
+				const roleId = (access: string) => KNOWN_ROLES.find(r => r.name === (access === "owner" ? "Owner" : access === "write" ? "Member" : "Reader"))!.id;
+				const record = (collectionName: string, value: Record<string, unknown>) => ({...value, collectionName, collectionId: collectionName, created: "", updated: ""} as RecordModel);
+				const groups: [string, RecordModel[]][] = [
+					["users", state.profiles.map(p => record("users", {...p, email: ""}))],
+					["providers", [record("providers", {id: "freelay", name: "Freelay", url: client.sessions.identity.audience, self_hosted: true})]],
+					["relays", state.relays.map(r => record("relays", {...r, guid: r.id, version: 1, creator: "", user_limit: Number.MAX_SAFE_INTEGER, cta: "", plan: "Free", storage_quota: "", provider: "freelay", effectiveRole: r.owner ? "Owner" : r.access === "write" ? "Member" : "Reader"}))],
+					["shared_folders", state.folders.map(f => record("shared_folders", {...f, guid: f.id, effectiveRole: state.relays.find(r => r.id === f.relay)?.owner ? "Owner" : f.access === "write" ? "Member" : "Reader"}))],
+					["relay_roles", state.memberships.map(m => record("relay_roles", {id: m.relay + ":" + m.principal, relay: m.relay, user: m.principal, role: roleId(m.access)}))],
+					["shared_folder_roles", state.folderMemberships.map(m => record("shared_folder_roles", {id: m.folder + ":" + m.principal, shared_folder: m.folder, user: m.principal, role: roleId(m.access)}))],
+				];
+				// Update existing adapters in place. Never clear/rebuild all folders:
+				// local sync consumers hold references to these observable objects.
+				const postie = PostOffice.getInstance();
+				postie.beginTransaction();
+				try {
+					for (const [collection, records] of groups) {
+						const target = store.collections.get(collection);
+						const ids = new Set(records.map(r => r.id));
+						for (const item of target?.items() || []) {
+							if (hasId(item) && !ids.has(item.id)) target?.delete(item.id);
+						}
+						for (const item of records) store.ingest(item);
+					}
+					this._rolesHydrated = true;
+					this.relayRoles.notifyListeners(); this.folderRoles.notifyListeners();
+				} finally { postie.commitTransaction(); }
+			})().finally(() => { this.refreshPending = undefined; });
 		}
-		return this.pb
-			.collection("relay_invitations")
-			.update<RelayInvitationDAO>(relayInvitation.id, {
-				enabled: value,
-			})
-			.then((invitation) => {
-				const invite = this.store?.ingest<RelayInvitation>(invitation);
-				if (!invite) {
-					throw new Error("unable to toggle invitation enable");
-				}
-				return invite;
-			});
+		return this.refreshPending;
 	}
+
+	/** UX policy only: the server independently authorizes every operation. */
+	authorize(principal: string, action: string, resource: Resource): boolean {
+		if (principal !== this.user?.id || !this.snapshot) return false;
+		const [kind,id] = resource;
+		const folder = kind === "folder" ? this.snapshot.folders.find(f => f.id === id) : undefined;
+		const relay = this.snapshot.relays.find(r => r.id === (folder?.relay || id));
+		if (!relay || relay.state !== "active") return false;
+		if (kind === "relay") return relay.owner && ["rename","create_folder","manage_users","manage_sharing","delete"].includes(action);
+		if (!folder) return false;
+		if (["read_content","download"].includes(action)) return true;
+		if (["edit_content","manage_files","upload"].includes(action)) return folder.access === "write";
+		return relay.owner && ["manage_users","make_private","rename","delete"].includes(action);
+	}
+
+	async acceptInvitation(code: string): Promise<Relay> {
+		const result = await this.client.accept(code,this.loginManager.loginSettings.get().name || "Freelay user");
+		await this.loginManager.login();
+		await this.update();
+		const relay = this.relays.get(result.relay);
+		if (!relay) throw new Error("Accepted relay is unavailable");
+		return relay;
+	}
+	async createRelay(name: string): Promise<Relay> {
+		const result = await this.client.createRelay(name);
+		await this.update();
+		return this.relays.get(result.id)!;
+	}
+	async createSelfHostedRelay(url?: string, providerId?: string, organizationId?: string): Promise<Relay> {
+		return this.createRelay("New relay");
+	}
+	async updateRelay(relay: Relay): Promise<Relay> {
+		await this.client.renameRelay(relay.id,relay.name.trim()); await this.update();
+		return this.relays.get(relay.id)!;
+	}
+	async createRemoteFolder(guid: string, name: string, relay: Relay, isPrivate = false): Promise<RemoteFolder> {
+		await this.client.createFolder(relay.id,guid,name,isPrivate); await this.update();
+		return this.remoteFolders.get(guid)!;
+	}
+	async deleteRemote(folder: RemoteSharedFolder): Promise<boolean> {
+		await this.client.deleteFolder(folder.relayId,folder.id); await this.update(); return true;
+	}
+	async destroyRelay(relay: Relay): Promise<boolean> {
+		await this.client.deleteRelay(relay.id); await this.update(); return true;
+	}
+	async leaveRelay(relay: Relay): Promise<void> {
+		const kind = relay.owner ? "owners" : "members";
+		await this.client.mutate(`api/v1/relays/${relay.id}/${kind}/${this.user!.id}`,"DELETE"); await this.update();
+	}
+	async kick(role: RelayRole): Promise<void> {
+		await this.client.mutate(`api/v1/relays/${role.relayId}/${role.role === "Owner" ? "owners" : "members"}/${role.userId}`,"DELETE"); await this.update();
+	}
+	async updateRelayRole(role: RelayRole, name: Role): Promise<RelayRole> {
+		// The server changes ownership/membership atomically and protects the last Owner.
+		await this.client.mutate(`api/v1/relays/${role.relayId}/${name === "Owner" ? "owners" : "members"}/${role.userId}`,"POST",name === "Owner" ? undefined : {access: name === "Member" ? "write" : "read"});
+		await this.update(); return this.relayRoles.get(role.id)!;
+	}
+	async addFolderRole(folder: RemoteFolder, grant: FolderRoleGrant): Promise<FolderRole> {
+		if (grant.role === "Owner") throw new Error("Ownership is relay-scoped");
+		await this.client.mutate(`api/v1/relays/${folder.relayId}/folders/${folder.id}/members/${grant.user}`,"POST",{access: grant.role === "Member" ? "write" : "read"});
+		await this.update(); return this.folderRoles.get(folder.id + ":" + grant.user)!;
+	}
+	async removeFolderRole(role: FolderRole): Promise<void> {
+		await this.client.mutate(`api/v1/relays/${role.sharedFolder.relayId}/folders/${role.sharedFolderId}/members/${role.userId}`,"DELETE"); await this.update();
+	}
+	async updateFolderRole(role: FolderRole, name: Role): Promise<FolderRole> { return this.addFolderRole(role.sharedFolder,{user: role.userId,role: name}); }
+	async updateFolderPrivacy(folder: RemoteFolder, isPrivate: boolean): Promise<RemoteFolder> { return this.updateRemoteFolder(folder,{private: isPrivate}); }
+	async updateRemoteFolder(folder: RemoteSharedFolder, updates: Partial<{name: string; private: boolean}>): Promise<RemoteSharedFolder> {
+		await this.client.mutate(`api/v1/relays/${folder.relayId}/folders/${folder.id}`,"PATCH",{name: updates.name ?? folder.name, private: updates.private ?? folder.private});
+		await this.update(); return this.remoteFolders.get(folder.id)!;
+	}
+	expectCreatorGrant(folder: RemoteFolder): void { /* Owner access is immediate. */ }
+	hasPendingCreatorGrant(folderId: string): boolean { return false; }
+	private settlePendingCreatorGrants(): void {}
 
 	async getRelayInvitation(relay: Relay): Promise<RelayInvitation | undefined> {
-		if (!this.pb) return undefined;
-		const relayInvitation = this.relayInvitations.find((invite) => {
-			return invite.relayId === relay.id;
-		});
-		if (relayInvitation) {
-			return relayInvitation;
-		}
-		return this.pb
-			.collection("relay_invitations")
-			.getList<RelayInvitationDAO>(0, 200)
-			.then((invitations) => {
-				invitations.items.forEach((invite) => {
-					this.store?.ingest(invite);
-				});
-				const invite = this.relayInvitations.find((invite) => {
-					return invite.relayId === relay.id;
-				});
-				if (invite) {
-					return invite;
-				}
-				return;
-			});
+		if (!relay.owner) return undefined;
+		const result = await this.client.invite(relay.id,"write");
+		const record = {collectionName: "relay_invitations", id: result.id, relay: relay.id, role: KNOWN_ROLES[1].id, key: result.code, enabled: true} as RelayInvitationDAO;
+		return new RelayInvitationAuto(record,this.relays,this.roles);
 	}
-
-	async getSubscriptionToken(subscription: RelaySubscription): Promise<string> {
-		if (!this.pb || !this.pb.authStore.isValid) {
-			throw new Error("Auth is not valid");
-		}
-		const url = `/api/subscription/${subscription.id}/token`;
-		const response = (await this.pb.send(url, {
-			method: "POST",
-		})) as unknown;
-		if (response !== 200) {
-			throw new Error("Token API failed");
-		}
-		return (response as unknown as { json(): Record<string, string> }).json()[
-			"token"
-		];
+	async rotateKey(invitation: RelayInvitation): Promise<RelayInvitation> {
+		await this.toggleRelayInvitation(invitation,false);
+		return (await this.getRelayInvitation(invitation.relay))!;
 	}
-
-	_handleEvent = (
-		collectionName: string,
-		e: RecordSubscription<RecordModel>,
-	) => {
-		this.debug(`[Event]: ${collectionName}`, e.action, e.record);
-		if (e.action === "delete") {
-			this.store?.delete(e.record);
-		} else {
-			this.store?.ingest(e.record);
-		}
-	};
-
-	async subscribe() {
-		if (
-			!this.pb ||
-			!this.pb.authStore.isValid ||
-			this.pb.authStore.model?.id === undefined
-		) {
-			this.warn("unable to subscribe, pocketbase client is not ready");
-			return;
-		}
-		const collections = [
-			{
-				name: "relays",
-				expand: [
-					"relay_invitations_via_relay",
-					"shared_folders_via_relay",
-					"shared_folders_via_relay.creator",
-					"subscriptions_via_relay",
-					"subscriptions_via_relay.relay",
-					"subscriptions_via_relay.relay.storage_quota",
-					"creator",
-				],
-			},
-			{ name: "relay_invitations", expand: ["relay"] },
-			{ name: "providers", expand: [] },
-			{ name: "relay_roles", expand: ["user", "relay"] },
-			{ name: "shared_folders", expand: ["relay", "creator"] },
-			{ name: "shared_folder_roles", expand: ["user", "shared_folder"] },
-			{ name: "subscriptions", expand: ["user", "relay"] },
-		];
-
-		// Idempotent. PocketBase's subscribe() stacks listener closures onto
-		// a per-topic array with no dedup, so calling this twice would fire
-		// our _handleEvent twice per server event. offline(), logout(), and
-		// destroy() clear the flag so the next call re-registers.
-		if (this._isSubscribed) {
-			return;
-		}
-		this._isSubscribed = true;
-
-		for (const collection of collections) {
-			void this.pb
-				.collection(collection.name)
-				.subscribe("*", (e) => this._handleEvent(collection.name, e), {
-					expand: collection.expand.join(","),
-					fetch: customFetch,
-				});
-		}
+	async toggleRelayInvitation(invitation: RelayInvitation, enabled: boolean): Promise<RelayInvitation> {
+		if (enabled) return (await this.getRelayInvitation(invitation.relay))!;
+		await this.client.mutate(`api/v1/relays/${invitation.relayId}/invitations/${invitation.id}`,"DELETE");
+		invitation.update({collectionName: "relay_invitations", id: invitation.id, relay: invitation.relayId, role: KNOWN_ROLES.find(r => r.name === invitation.role)!.id, key: "", enabled: false});
+		return invitation;
 	}
-
-	/**
-	 * Tear down every PocketBase realtime subscription and close the SSE
-	 * stream. Called from the network offline handler to stop PB's infinite
-	 * reconnect loop while the browser reports no connectivity.
-	 *
-	 * pb.realtime.unsubscribe() wipes PB's entire subscriptions map,
-	 * including per-record subscriptions held by tagged records in the
-	 * store. online() rebuilds both layers.
-	 */
-	offline(): void {
-		if (!this.pb) return;
-		void this.pb.realtime.unsubscribe();
-		this._isSubscribed = false;
-	}
-
-	/**
-	 * Rebuild all PocketBase realtime state after coming back online:
-	 * re-register the top-level collection streams, reinstall per-record
-	 * subscriptions on tagged records already in the store, then refresh
-	 * the store contents via a full list fetch.
-	 */
-	async online(): Promise<void> {
-		await this.subscribe();
-		await this.resubscribeRecords();
-		await this.update();
-	}
-
-	/**
-	 * Scan every Store collection for records implementing
-	 * HasRecordSubscription and (re)install their per-record realtime
-	 * subscriptions. Safe to call repeatedly; each record's existing
-	 * subscription handle is released before a fresh one is installed.
-	 */
-	private async resubscribeRecords(): Promise<void> {
-		if (!this.store?.collections) return;
-		for (const collection of this.store.collections.values()) {
-			for (const item of collection.items()) {
-				if (!hasRecordSubscription(item)) continue;
-				try {
-					item.offRecordSubscription?.();
-				} catch (e) {
-					this.debug("stale record unsubscribe failed", e);
-				}
-				item.offRecordSubscription = await this.subscribeRecord(
-					item.collectionName,
-					item.id,
-					[],
-				);
-			}
-		}
-	}
-
-	async subscribeRecord(
-		collectionName: string,
-		recordId: string,
-		expand: string[],
-	): Promise<Unsubscriber | undefined> {
-		if (
-			!this.pb ||
-			!this.pb.authStore.isValid ||
-			this.pb.authStore.model?.id === undefined
-		) {
-			this.warn("unable to subscribe, pocketbase client is not ready");
-			return;
-		}
-		return this.pb
-			.collection(collectionName)
-			.subscribe(recordId, (e) => this._handleEvent(collectionName, e), {
-				expand: expand.join(","),
-				fetch: customFetch,
-			});
-	}
-
-	async refreshRemoteFolder(remoteFolder: RemoteFolder) {
-		if (
-			!this.pb ||
-			!this.pb.authStore.isValid ||
-			this.pb.authStore.model?.id === undefined
-		) {
-			return Promise.resolve([]);
-		}
-		const record = await this.pb
-			.collection("shared_folders")
-			.getOne(remoteFolder.id, {
-				expand: "shared_folder_roles_via_shared_folder",
-			});
-		if (!this.destroyed && this.store) {
-			this.store.ingest(record);
-		}
-	}
-
-	async refreshRelay(relay: Relay) {
-		if (
-			!this.pb ||
-			!this.pb.authStore.isValid ||
-			this.pb.authStore.model?.id === undefined
-		) {
-			return Promise.resolve([]);
-		}
-		const record = await this.pb.collection("relays").getOne(relay.id, {
-			expand: "relay_roles_via_relay,shared_folders_via_relay,storage_quota",
-		});
-		if (!this.destroyed && this.store) {
-			this.store.ingest(record);
-		}
-	}
-
-	/**
-	 * Whether every relay-role and folder-role record the server holds for
-	 * this user has been fetched at least once this session. Before that, a
-	 * role missing from the store may simply not have arrived, so only a
-	 * present record is evidence of anything; afterwards absence is real,
-	 * and the realtime subscription keeps the store current.
-	 */
-	get rolesHydrated(): boolean {
-		return this._rolesHydrated;
-	}
-
-	async update() {
-		const authenticated =
-			!!this.pb &&
-			this.pb.authStore.isValid &&
-			this.pb.authStore.model?.id !== undefined;
-		const withPb = (
-			collection: string,
-			options:
-				| ((userId: string) => RecordFullListOptions)
-				| RecordFullListOptions = {},
-		): Promise<RecordModel[]> => {
-			if (
-				!this.pb ||
-				!this.pb.authStore.isValid ||
-				this.pb.authStore.model?.id === undefined
-			) {
-				return Promise.resolve([]);
-			}
-			if (typeof options === "function") {
-				options = options(this.pb.authStore.model.id as string);
-			}
-			return this.pb.collection(collection).getFullList<RecordModel>(options);
-		};
-
-		const promises = [
-			withPb("users", (userId) => ({
-				filter: `id="${userId}"`,
-				expand: [
-					"relay_roles_via_user",
-					"relay_roles_via_user.relay",
-					"relay_roles_via_user.relay.storage_quota",
-					"relay_roles_via_user.role",
-				].join(","),
-			})),
-			withPb("relay_roles", {
-				expand: "user,role",
-			}),
-			withPb("providers"),
-			withPb("relay_invitations"),
-			withPb("shared_folders", {
-				expand: "relay,creator",
-			}),
-			withPb("shared_folder_roles", {
-				expand: "user,role",
-			}),
-			withPb("subscriptions", {
-				expand: "relay,user",
-			}),
-		];
-		await Promise.all(promises.map(async (promise) => {
-			const result = await promise;
-			for (const record of result) {
-				if (!this.destroyed && this.store) {
-					this.store.ingest(record);
-				}
-			}
-		}));
-		if (authenticated && !this.destroyed && this.store && !this._rolesHydrated) {
-			this._rolesHydrated = true;
-			// Shared folders derive their role-policy answers on role-map
-			// notifications. Nothing in the maps changed, but a missing role
-			// just became evidence, so wake them to re-derive.
-			this.relayRoles.notifyListeners();
-			this.folderRoles.notifyListeners();
-		}
-	}
-
-	async acceptInvitation(shareKey: string): Promise<Relay> {
-		if (!this.pb) throw new Error("Failed to accept invitation");
-		const response = (await this.pb
-			.send("/api/accept-invitation", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					key: shareKey,
-				}),
-			})
-			.catch((response) => {
-				throw response;
-			})) as RecordModel;
-		this.debug("[InviteAccept]", response);
-		const relay = this.store?.ingest<Relay>(response);
-		if (!relay) {
-			throw new Error("Failed to accept invitation");
-		}
-		return relay;
-	}
-
-	async createRelay(name: string): Promise<Relay> {
-		const guid = uuid();
-		const record = await this.pb?.collection("relays").create<RelayDAO>(
-			{
-				guid: guid,
-				name: name,
-				path: null,
-			},
-			{
-				expand:
-					"relay_roles_via_relay,relay_invitations_via_relay,storage_quota",
-			},
-		);
-		if (!record) {
-			throw new Error("Failed to create Relay");
-		}
-		if (!this.user) {
-			throw new Error("Not Logged In");
-		}
-		const relay = this.store?.ingest<Relay>(record);
-		if (!relay) {
-			throw new Error("Failed to create relay");
-		}
-		return relay;
-	}
-
-	async createSelfHostedRelay(
-		url?: string,
-		providerId?: string,
-		organizationId?: string,
-	): Promise<Relay> {
-		if (!this.pb) {
-			throw new Error("Not connected to relay service");
-		}
-
-		// Prepare request body - either url for new host or provider for existing
-		const requestBody: {
-			url?: string;
-			provider?: string;
-			organization?: string;
-		} = {};
-		if (providerId) {
-			requestBody.provider = providerId;
-		} else if (url) {
-			requestBody.url = url;
-		} else {
-			throw new Error("Either URL or provider ID must be provided");
-		}
-
-		// Add organization if provided
-		if (organizationId) {
-			requestBody.organization = organizationId;
-		}
-
-		// Call the self-host endpoint
-		const response: unknown = await this.pb.send(
-			"/api/collections/relays/self-host",
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(requestBody),
-			},
-		);
-
-		// Ingest the response into the store
-		const relay = this.store?.ingest<Relay>(response as RecordModel);
-		if (!relay) {
-			throw new Error("Failed to create self-hosted relay");
-		}
-
-		return relay;
-	}
-
-	async updateRelay(relay: Relay): Promise<Relay> {
-		if (!this.pb) throw new Error("Failed to update relay");
-		const record = await this.pb
-			.collection("relays")
-			.update<RelayDAO>(relay.id, {
-				name: relay.name.trim(),
-			});
-		const updated = this.store?.ingest<Relay>(record);
-		if (!updated) {
-			throw new Error("Failed to update relay");
-		}
-		return updated;
-	}
-
-	async deleteRemote(remoteFolder: RemoteSharedFolder): Promise<boolean> {
-		if (!this.pb) throw new Error("Failed to delete folder");
-		this.requireUserPermission(["folder", "delete"], remoteFolder, "You cannot delete this shared folder.");
-		await this.pb.collection("shared_folders").delete(remoteFolder.id);
-		// Reconcile before returning; the realtime deletion may arrive later.
-		this.store?.cascade("shared_folders", remoteFolder.id);
-		return true;
-	}
-
-	async createRemoteFolder(
-		guid: string,
-		name: string,
-		relay: Relay,
-		isPrivate: boolean = false,
-	): Promise<RemoteFolder> {
-		if (!this.pb) throw new Error("Failed to create folder");
-		this.requireUserPermission(["relay", "create_folder"], relay, "You cannot share folders on this relay.");
-		const record = await this.pb
-			.collection("shared_folders")
-			.create<RemoteFolderDAO>(
-				{
-					name,
-					guid,
-					relay: relay.id,
-					creator: this.user?.id,
-					private: isPrivate,
-				},
-				{ expand: "relay" },
-			);
-		const folder = this.store?.ingest<RemoteFolder>(record);
-		if (!folder) {
-			throw new Error("Failed to create folder");
-		}
-		if (isPrivate) {
-			this.expectCreatorGrant(folder);
-		}
-		return folder;
-	}
-
-	// Called when this client has just created a private folder: its creator
-	// grant is on its way from the server. Clears itself when the first role
-	// record for this user on the folder arrives, whatever that record says.
-	expectCreatorGrant(folder: RemoteFolder | RemoteSharedFolder): void {
-		this.pendingCreatorGrants.add(folder.id);
-		this.settlePendingCreatorGrants();
-	}
-
-	hasPendingCreatorGrant(folderId: string): boolean {
-		// Listener delivery is deferred, so settle against the records as they
-		// stand right now before answering.
-		this.settlePendingCreatorGrants();
-		return this.pendingCreatorGrants.has(folderId);
-	}
-
-	private settlePendingCreatorGrants(): void {
-		if (this.pendingCreatorGrants.size === 0) return;
-		const userId = this.user?.id;
-		for (const folderId of this.pendingCreatorGrants) {
-			const arrived = this.folderRoles.find(
-				(role) => role.sharedFolderId === folderId && role.userId === userId,
-			);
-			if (arrived) {
-				this.pendingCreatorGrants.delete(folderId);
-			}
-		}
-	}
-
-	async destroyRelay(relay: Relay): Promise<boolean> {
-		this.store?.cascade("relays", relay.id);
-		await this.pb?.collection("relays").delete(relay.id);
-		return true;
-	}
-
-	async leaveRelay(relay: Relay): Promise<void> {
-		const role = this.relayRoles.find((role) => {
-			return role.userId === this.user?.id && role.relayId === relay.id;
-		});
-		if (role) {
-			await this.pb?.collection("relay_roles").delete(role.id);
-		} else {
-			this.warn("No role found to leave relay");
-		}
-		this.store?.cascade("relays", relay.id);
-	}
-
-	async kick(relay_role: RelayRole) {
-		return this.pb?.collection("relay_roles").delete(relay_role.id);
-	}
-
-	async updateRelayRole(
-		relayRole: RelayRole,
-		roleName: Role,
-	): Promise<RelayRole> {
-		if (!this.pb) throw new Error("Failed to update relay role");
-		const newRole = offeredRelayRoles(this.roles.values()).find(
-			(role) => role.name === roleName,
-		);
-		if (!newRole) {
-			throw new Error("This role is not available for relay membership.");
-		}
-		const record = await this.pb
-			.collection("relay_roles")
-			.update<RelayRoleDAO>(relayRole.id, {
-				role: newRole.id,
-			});
-		const updated = this.store?.ingest<RelayRole>(record);
-		if (!updated) {
-			throw new Error("Failed to update relay role");
-		}
-		return updated;
-	}
-
-	async addFolderRole(
-		folder: RemoteFolder,
-		grant: FolderRoleGrant,
-	): Promise<FolderRole> {
-		if (!this.pb) throw new Error("Failed to add folder role");
-		this.requireUserPermission(["folder", "manage_users"], folder, "You cannot manage this folder's users.");
-		const role = this.getFolderRoleOptions(folder.relayId, grant.user).find(
-			(item) => item.name === grant.role,
-		);
-		if (!folder.private || !role) {
-			throw new Error("This folder role is not available for the user's relay access.");
-		}
-		const record = await this.pb
-			.collection("shared_folder_roles")
-			.create<FolderRoleDAO>({
-				user: grant.user,
-				role: role.id,
-				shared_folder: folder.id,
-			});
-		const folderRole = this.store?.ingest<FolderRole>(record);
-		if (!folderRole) {
-			throw new Error("Failed to add folder role");
-		}
-		return folderRole;
-	}
-
-	async removeFolderRole(folderRole: FolderRole): Promise<void> {
-		if (!this.pb) throw new Error("Failed to remove folder role");
-		if (folderRole.userId !== this.user?.id) {
-			this.requireUserPermission(["folder", "manage_users"], folderRole.sharedFolder, "You cannot manage this folder's users.");
-		}
-		await this.pb.collection("shared_folder_roles").delete(folderRole.id);
-	}
-
-	async updateFolderRole(
-		folderRole: FolderRole,
-		roleName: Role,
-	): Promise<FolderRole> {
-		if (!this.pb) throw new Error("Failed to update folder role");
-		const folder = folderRole.sharedFolder;
-		this.requireUserPermission(["folder", "manage_users"], folder, "You cannot manage this folder's users.");
-		const newRole = this.getFolderRoleOptions(folder.relayId, folderRole.userId).find(
-			(role) => role.name === roleName,
-		);
-		if (!folder.private || !newRole) {
-			throw new Error("This folder role is not available for the user's relay access.");
-		}
-		const record = await this.pb
-			.collection("shared_folder_roles")
-			.update<FolderRoleDAO>(folderRole.id, {
-				role: newRole.id,
-			});
-		const updated = this.store?.ingest<FolderRole>(record);
-		if (!updated) {
-			throw new Error("Failed to update folder role");
-		}
-		return updated;
-	}
-
-	async updateFolderPrivacy(
-		folder: RemoteFolder,
-		isPrivate: boolean,
-	): Promise<RemoteFolder> {
-		if (!this.pb) throw new Error("Failed to update folder privacy");
-		this.requireUserPermission(["folder", "rename"], folder, "You cannot change this shared folder's settings.");
-		const record = await this.pb
-			.collection("shared_folders")
-			.update<RemoteFolderDAO>(folder.id, {
-				private: isPrivate,
-			});
-		const updated = this.store?.ingest<RemoteFolder>(record);
-		if (!updated) {
-			throw new Error("Failed to update folder privacy");
-		}
-		return updated;
-	}
-
-	async updateRemoteFolder(
-		folder: RemoteSharedFolder,
-		updates: Partial<{ name: string; private: boolean }>,
-	): Promise<RemoteSharedFolder> {
-		if (!this.pb) throw new Error("Failed to update folder");
-		this.requireUserPermission(["folder", "rename"], folder, "You cannot change this shared folder's settings.");
-		const record = await this.pb
-			.collection("shared_folders")
-			.update<RemoteFolderDAO>(folder.id, updates);
-		const updated = this.store?.ingest<RemoteFolder>(record);
-		if (!updated) {
-			throw new Error("Failed to update folder");
-		}
-		return updated;
-	}
+	async getSubscriptionToken(subscription: RelaySubscription): Promise<string> { throw new Error("Freelay has no subscriptions"); }
 
 	private requireUserPermission(
 		permission: Permission,
@@ -2493,6 +1987,7 @@ export class RelayManager extends HasLogging {
 
 	destroy(): void {
 		this.destroyed = true;
+		if (this.poll) globalThis.clearInterval(this.poll);
 		this._offLoginManager?.();
 		this._offLoginManager = null as unknown as typeof this._offLoginManager;
 		this._offFeatureFlags?.();
@@ -2500,12 +1995,9 @@ export class RelayManager extends HasLogging {
 		this._offFolderRoles?.();
 		this._offFolderRoles = undefined;
 		this.pendingCreatorGrants.clear();
-		this.pb?.cancelAllRequests();
-		void this.pb?.realtime?.unsubscribe();
 		this._isSubscribed = false;
 		this.loginManager = null as unknown as typeof this.loginManager;
 		this.store?.destroy();
-		this.pb = null;
 		this.authUser = null;
 		this.store = null as unknown as typeof this.store;
 		this.policyManager = undefined;

@@ -20,11 +20,15 @@ const runBuildMetadataCommand = (command) => execSync(command, {
 	stdio: ["ignore", "pipe", "pipe"],
 });
 
+const manifestVersion = JSON.parse(fs.readFileSync("manifest.json", "utf8")).version;
+
 const getGitTag = () => {
+	const releaseVersion = process.env.FREELAY_VERSION?.trim();
+	if (releaseVersion) return releaseVersion;
 	try {
-		return runBuildMetadataCommand("git describe --tags --always").trim();
+		return `${manifestVersion}+${runBuildMetadataCommand("git rev-parse --short=12 HEAD").trim()}`;
 	} catch (e) {
-		return "dev";
+		return manifestVersion;
 	}
 };
 const gitTag = getGitTag();
@@ -38,9 +42,9 @@ const out = positionalArgs[0] || ".";
 const outfile = out + "/main.js";
 const tld = staging ? "dev" : "md";
 
-const apiUrl = `https://api.system3.${tld}`;
-const authUrl = `https://auth.system3.${tld}`;
-const healthUrl = `${apiUrl}/health?version=${gitTag}`;
+const apiUrl = "";
+const authUrl = "";
+const healthUrl = "";
 console.log("git tag:", gitTag);
 console.log("health URL", healthUrl);
 
@@ -183,7 +187,7 @@ const context = await esbuild.context({
 		HEALTH_URL: `"${healthUrl}"`,
 		API_URL: `"${apiUrl}"`,
 		AUTH_URL: `"${authUrl}"`,
-		REPOSITORY: `"No-Instructions/Relay"`,
+		REPOSITORY: `"thesilverage/freelay"`,
 	},
 	treeShaking: true,
 	outfile,
@@ -227,9 +231,9 @@ const updateManifest = (manifest) => {
 	const manifestPath = path.join(out, path.basename("manifest.json"));
 	const raw_manifest = fs.readFileSync(manifestPath);
 	const parsed = JSON.parse(raw_manifest);
-	parsed.version = gitTag;
+	parsed.version = process.env.FREELAY_VERSION?.trim() || manifestVersion;
 	const new_manifest = JSON.stringify(parsed, null, 2);
-	console.log(`Set ${manifest} version to ${gitTag}`);
+	console.log(`Set ${manifest} version to ${parsed.version}`);
 	fs.writeFileSync(manifestPath, new_manifest);
 };
 

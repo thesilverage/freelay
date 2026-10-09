@@ -82,7 +82,7 @@ export function getConnectionManager(
 					plugins?: Record<string, { _liveViews?: LiveViewManager }>;
 				};
 			};
-		} | undefined)?.app?.plugins?.plugins?.["system3-relay"]?._liveViews ?? null
+		} | undefined)?.app?.plugins?.plugins?.["freelay"]?._liveViews ?? null
 	);
 }
 
@@ -239,7 +239,7 @@ export class LoggedOutView implements S3View {
 	attach(): Promise<S3View> {
 		this.banner ??= new Banner(
 			this.view,
-			{ short: "Login to Relay", long: "Login to enable Live edits" },
+			{ short: "Login to Freelay", long: "Login to enable Live edits" },
 			async () => {
 				const loggedIn = await this.login();
 				if (loggedIn) this.release();
@@ -432,7 +432,7 @@ export class RelayCanvasView implements S3View {
 			this.view.containerEl.querySelector(".view-actions");
 		if (viewActionsElement && viewActionsElement.firstChild) {
 			const viewActions = this.view.containerEl.querySelectorAll(
-				".system3-view-action",
+				".freelay-view-action",
 			);
 			if (viewActions.length > 0) {
 				viewActions.forEach((viewAction) => {
@@ -783,7 +783,7 @@ export class LiveView<ViewType extends TextFileView>
 		this._conflictSession = openSession(this.view, cm, hsm, conflict, {
 			collaborator: this.collaboratorName(),
 			report: () => {
-				(this._parent.app as { commands?: { executeCommandById(id: string): void } }).commands?.executeCommandById("system3-relay:send-bug-report");
+				(this._parent.app as { commands?: { executeCommandById(id: string): void } }).commands?.executeCommandById("freelay:send-bug-report");
 			},
 		});
 		return true;
@@ -1052,7 +1052,7 @@ export class LiveView<ViewType extends TextFileView>
 			this.view.containerEl.querySelector(".view-actions");
 		if (viewActionsElement && viewActionsElement.firstChild) {
 			const viewActions = this.view.containerEl.querySelectorAll(
-				".system3-view-action",
+				".freelay-view-action",
 			);
 			if (viewActions.length > 0) {
 				viewActions.forEach((viewAction) => {
@@ -1526,13 +1526,13 @@ export class LiveViewManager {
 	}
 
 	goOffline() {
-		this.log("[System 3][Relay][Live Views] going offline");
+		this.log("[Freelay][Live Views] going offline");
 		transitionViewsOffline(this.views);
 		void this.refresh("[NetworkStatus]");
 	}
 
 	goOnline() {
-		this.log("[System 3][Relay][Live Views] going online");
+		this.log("[Freelay][Live Views] going online");
 		void this.refresh("[NetworkStatus]");
 		this.sharedFolders.items().forEach((folder: SharedFolder) => {
 			void folder.connect();
@@ -2037,7 +2037,7 @@ export class LiveViewManager {
 
 		if (attemptedConnections > backgroundConnections) {
 			this.warn(
-				`[System 3][Relay][Live Views] connection pool (max ${backgroundConnections}): rejected connections for ${
+				`[Freelay][Live Views] connection pool (max ${backgroundConnections}): rejected connections for ${
 					attemptedConnections - backgroundConnections
 				} views`,
 			);
@@ -2152,7 +2152,7 @@ export class LiveViewManager {
 		try {
 			views = await this.getViews();
 		} catch (e) {
-			this.warn("[System 3][Relay][Live Views] error getting views", e);
+			this.warn("[Freelay][Live Views] error getting views", e);
 			return false;
 		}
 		const activeDocumentFolders = this.findFolders();

@@ -1,44 +1,18 @@
-# Contributing to Relay
+# Contributing to Freelay
 
-Relay's Obsidian plugin is MIT licensed and developed in the open so users can inspect and audit the code they install. Transparency and trust are the primary goals of this repository.
+Keep changes small, explain why they are needed, and include tests. Preserve the
+upstream CRDT/sync engine and public interfaces wherever possible; place Freelay
+control-plane behavior in its dedicated modules and adapters.
 
-The best place to start is the Relay Discord: [Join our Discord](https://discord.system3.md). Please discuss an idea there before opening a large pull request or starting work on a behavior change.
+Use this fork's issues and pull requests, not upstream commercial support
+channels. Discuss authentication, permissions, deletion, storage, and large
+refactors before implementing them. Do not post private keys, invitation codes,
+bearer tokens, or unredacted diagnostic logs.
 
-## What We Can Usually Review
+Run `npm test`, `npm run lint`, and `npm run build`. The public tests are under
+`tests/freelay/`; encrypted upstream tests remain untouched for merge
+compatibility. They are not required by the default public test command.
 
-We can usually review small, focused pull requests, especially:
-
-- Typo and documentation fixes
-- Small UI polish
-- Narrowly scoped bug fixes with clear reproduction steps
-- Small improvements to tests or developer ergonomics
-
-Keep pull requests easy to evaluate. Include what changed, why it changed, and how you tested it.
-
-## Changes to Discuss First
-
-Please talk to us in Discord before working on:
-
-- New product features
-- Protocol, sync, merge, auth, permissions, or billing behavior
-- Large refactors
-- Changes that require server support
-- Changes that affect data durability, privacy, encryption, or account access
-
-We probably will not accept large pull requests that arrive without prior discussion, even if the code is good. Relay has product constraints and private infrastructure that may not be obvious from this repository.
-
-## Development & Testing
-
-Relay has a proprietary development harness and test suite that is not publicly available.
-The unit tests included in this repository are encrypted.
-If you are interested in licensing our technology, please contact us.
-
-## Support and Security
-
-For questions, support, feature ideas, and early design discussion, use the [Relay Discord](https://discord.system3.md).
-
-For responsible security disclosures, email security@system3.md.
-
-## License
-
-By submitting code, documentation, or other changes to this repository, you agree that your contribution may be distributed under the repository's MIT license.
+Contributions are distributed under the MIT license. Retain existing attribution
+and third-party license notices. Freelay is an independent fork, not the upstream
+Relay service.

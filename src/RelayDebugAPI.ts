@@ -595,7 +595,7 @@ export class RelayDebugAPI {
 
   /** The attached plugin, or a loud failure when the API outlives it. */
   private requirePlugin(): Live {
-    if (!this.plugin) throw new Error('Relay debug API has no attached plugin');
+    if (!this.plugin) throw new Error('Freelay debug API has no attached plugin');
     return this.plugin;
   }
 
@@ -775,9 +775,9 @@ export class RelayDebugAPI {
         const relayManager = this.plugin?.relayManager;
         if (!relayManager) throw new Error('RelayManager not available');
         const relay = this.findRelayByGuid(guid);
-        if (!relay) throw new Error(`Relay not found: ${guid}`);
+        if (!relay) throw new Error(`Freelay not found: ${guid}`);
         const invitation = await relayManager.getRelayInvitation(relay);
-        if (!invitation?.key) throw new Error(`Relay invitation not found: ${guid}`);
+        if (!invitation?.key) throw new Error(`Freelay invitation not found: ${guid}`);
         return { guid: relay.guid, name: relay.name, key: invitation.key };
       },
       acceptRelayShareKey: async (key) => {
@@ -790,7 +790,7 @@ export class RelayDebugAPI {
         const relayManager = this.plugin?.relayManager;
         if (!relayManager) throw new Error('RelayManager not available');
         const relay = this.findRelayByGuid(guid);
-        if (!relay) throw new Error(`Relay not found: ${guid}`);
+        if (!relay) throw new Error(`Freelay not found: ${guid}`);
         relay.name = newName;
         await relayManager.updateRelay(relay);
         return { guid: relay.guid, name: relay.name };
@@ -799,7 +799,7 @@ export class RelayDebugAPI {
         const relayManager = this.plugin?.relayManager;
         if (!relayManager) throw new Error('RelayManager not available');
         const relay = this.findRelayByGuid(guid);
-        if (!relay) throw new Error(`Relay not found: ${guid}`);
+        if (!relay) throw new Error(`Freelay not found: ${guid}`);
         return await relayManager.destroyRelay(relay);
       },
 

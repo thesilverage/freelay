@@ -95,7 +95,7 @@
 				dispatch("input", e);
 			}}
 			on:keydown={handleKeyDown}
-			class={`system3-secret-text ${invalid ? "system3-input-invalid" : ""}`}
+			class={`freelay-secret-text ${invalid ? "freelay-input-invalid" : ""}`}
 			{disabled}
 		/>
 	{:else}
@@ -111,7 +111,7 @@
 				dispatch("input", e);
 			}}
 			on:keydown={handleKeyDown}
-			class={`system3-secret-text ${invalid ? "system3-input-invalid" : ""}`}
+			class={`freelay-secret-text ${invalid ? "freelay-input-invalid" : ""}`}
 			{disabled}
 		/>
 	{/if}
@@ -150,12 +150,12 @@
 		background-color: var(--background-modifier-hover);
 	}
 
-	.system3-secret-text {
+	.freelay-secret-text {
 		padding-inline-end: 28px !important;
 		font-family: monospace !important;
 	}
 
-	.system3-input-invalid {
+	.freelay-input-invalid {
 		border: 1px solid var(--color-red) !important;
 	}
 </style>

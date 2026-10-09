@@ -36,12 +36,12 @@ export interface ServerContext {
 export type ServerCommand = Command<ServerContext>;
 
 export const RELAY_OPTION: Record<string, CliOption> = {
-	relay: { value: "<name|guid>", description: "Relay", required: true },
+	relay: { value: "<name|guid>", description: "Freelay", required: true },
 };
 export const REMOTE_FOLDER_OPTION: Record<string, CliOption> = {
 	folder: { value: "<name|guid>", description: "Server folder", required: true },
 };
-const RELAY_FILTER = { relay: { ...RELAY_OPTION.relay, description: "Relay (default: all)", required: false } };
+const RELAY_FILTER = { relay: { ...RELAY_OPTION.relay, description: "Freelay (default: all)", required: false } };
 const REMOTE_FOLDER_FILTER = { folder: { ...REMOTE_FOLDER_OPTION.folder, description: "Server folder (default: all)", required: false } };
 
 function bytes(n: number): string {
@@ -95,7 +95,7 @@ function selectedRemoteFolders(params: CliData, ctx: ServerContext): RemoteShare
 
 const servers: ServerCommand = {
 	name: "servers",
-	description: "List Relay Servers",
+	description: "List relays",
 	options: RELAY_FILTER,
 	run(params, ctx) {
 		const rows = selectedRelays(params, ctx).map((relay) => relayRow(ctx, relay));
@@ -115,7 +115,7 @@ const servers: ServerCommand = {
 const server: ServerCommand = {
 	name: "server",
 	argument: "relay",
-	description: "Show Relay Server details",
+	description: "Show relay details",
 	options: RELAY_OPTION,
 	run(params, ctx) {
 		const relay = resolveRelay(ctx, required(params, "relay"));
@@ -139,7 +139,7 @@ const server: ServerCommand = {
 			data: { ...row, members, folders },
 			text: [
 				kv([
-					["Relay Server", relay.name],
+					["relay", relay.name],
 					["guid", relay.guid],
 					["role", relay.role],
 					["plan", relay.plan],
@@ -160,20 +160,20 @@ const server: ServerCommand = {
 
 const serverCreate: ServerCommand = {
 	name: "create",
-	description: "Create a Relay Server",
-	options: { name: { value: "<name>", description: "Relay Server name", required: true } },
+	description: "Create a relay",
+	options: { name: { value: "<name>", description: "relay name", required: true } },
 	async run(params, ctx) {
 		const relay = await ctx.relayManager.createRelay(required(params, "name"));
 		return {
 			data: { name: relay.name, guid: relay.guid },
-			text: `Created Relay Server ${relay.name} (${relay.guid})`,
+			text: `Created relay ${relay.name} (${relay.guid})`,
 		};
 	},
 };
 
 const serverSetName: ServerCommand = {
 	name: "rename",
-	description: "Set the Relay Server's name",
+	description: "Set the relay's name",
 	options: { ...RELAY_OPTION, name: { value: "<name>", description: "New name", required: true } },
 	async run(params, ctx) {
 		const relay = resolveRelay(ctx, required(params, "relay"));
@@ -289,7 +289,7 @@ function folderAccess(action: "add" | "remove"): ServerCommand {
 	return {
 		name: action,
 		description: action === "add" ? "Grant server member access to private folder" : "Revoke access to private folder",
-		options: { ...RELAY_OPTION, ...REMOTE_FOLDER_OPTION, user: { value: "<name|email|id>", description: "Relay member", required: true } },
+		options: { ...RELAY_OPTION, ...REMOTE_FOLDER_OPTION, user: { value: "<name|email|id>", description: "Freelay member", required: true } },
 		async run(params, ctx) {
 			const relay = resolveRelay(ctx, required(params, "relay"));
 			const remote = resolveRemoteFolder(relay, required(params, "folder"), ctx.suggest);

@@ -60,7 +60,7 @@ class NetworkStatus {
 
 	constructor(
 		private timeProvider: TimeProvider,
-		url: string,
+		private url: string,
 		interval = 10000,
 	) {
 		this._log = curryLog("[NetworkStatus]");
@@ -107,7 +107,7 @@ class NetworkStatus {
 	}
 
 	private async _checkStatus(): Promise<void> {
-		if (this.destroyed) return;
+		if (this.destroyed || !this.url) return;
 		const generation = this.generation;
 		const sequence = ++this.requestSequence;
 		const isCurrent = () => !this.destroyed && generation === this.generation && sequence >= this.latestResultSequence;

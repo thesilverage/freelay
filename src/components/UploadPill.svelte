@@ -8,7 +8,7 @@
 </script>
 
 <div
-	class="nav-file-tag system3-uploadpill"
+	class="nav-file-tag freelay-uploadpill"
 	aria-label={label}
 	data-status={status}
 	style={color ? `color:${color}` : ""}
@@ -17,7 +17,7 @@
 </div>
 
 <style>
-	.system3-uploadpill {
+	.freelay-uploadpill {
 		text-wrap: nowrap;
 	}
 </style>

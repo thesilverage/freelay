@@ -241,7 +241,7 @@
 	<!-- Mount point for the note state inspector strip. The strip component
 	     is owned by SyncStatusView and re-parented here after each render;
 	     the div is unconditional so Svelte keeps it stable across updates. -->
-	<div class="system3-note-state-slot"></div>
+	<div class="freelay-note-state-slot"></div>
 
 	{#if conflicts.length > 0}
 		<div class="sync-status-section">

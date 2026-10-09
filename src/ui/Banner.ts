@@ -35,7 +35,7 @@ export class Banner {
 		options: BannerOptions | string = {},
 	) {
 		this.options = typeof options === "string" ? {} : options;
-		this.namespace = typeof options === "string" ? options : (options.namespace ?? "system3");
+		this.namespace = typeof options === "string" ? options : (options.namespace ?? "freelay");
 		this.view = view;
 		this.text = text;
 		this.onClick = onClick;
@@ -116,7 +116,7 @@ export class Banner {
 		const bannerBox = leafContentEl.createDiv({ cls: `${this.namespace}-banner-box` });
 		this.element = bannerBox;
 		leafContentEl.insertBefore(bannerBox, contentEl);
-		leafContentEl.addClass("system3-has-banner");
+		leafContentEl.addClass("freelay-has-banner");
 		const banner = bannerBox.createDiv({ cls: `${this.namespace}-banner` });
 		if (this.options.backgroundColor) banner.style.backgroundColor = this.options.backgroundColor;
 		if (this.options.color) banner.style.color = this.options.color;
@@ -171,7 +171,7 @@ export class Banner {
 		const leafContentEl = this.view.containerEl;
 		const hasBanner = [...(slots.get(leafContentEl)?.values() ?? [])].some(slot =>
 			slot.active?.element && !slot.active.useHeaderButton);
-		if (!hasBanner) leafContentEl.removeClass("system3-has-banner");
+		if (!hasBanner) leafContentEl.removeClass("freelay-has-banner");
 	}
 
 	destroy() {

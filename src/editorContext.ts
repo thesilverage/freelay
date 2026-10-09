@@ -23,7 +23,7 @@ export function getRelayPlugin(editor: EditorView): RelayPlugin | null {
 	return (
 		(fileInfo as {
 			app?: { plugins?: { plugins?: Record<string, RelayPlugin | undefined> } };
-		} | undefined)?.app?.plugins?.plugins?.["system3-relay"] ?? null
+		} | undefined)?.app?.plugins?.plugins?.["freelay"] ?? null
 	);
 }
 

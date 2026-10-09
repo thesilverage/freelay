@@ -135,23 +135,23 @@ function userMessageForS3Error(details: S3ErrorDetails): string {
 		case "ThrottlingException":
 		case "TooManyRequests":
 		case "TooManyRequestsException":
-			return "Attachment storage is busy. Relay will retry the upload.";
+			return "Attachment storage is busy. Freelay will retry the upload.";
 		case "RequestTimeout":
-			return "Attachment storage timed out. Relay will retry the upload.";
+			return "Attachment storage timed out. Freelay will retry the upload.";
 		case "NetworkingError":
-			return "Could not reach attachment storage. Relay will retry.";
+			return "Could not reach attachment storage. Freelay will retry.";
 		case "AccessDenied":
-			return "Relay could not access attachment storage.";
+			return "Freelay could not access attachment storage.";
 		case "ExpiredToken":
 		case "InvalidToken":
 			return "Attachment storage authorization expired.";
 	}
 
 	if (details.status === 429) {
-		return "Attachment storage is busy. Relay will retry the upload.";
+		return "Attachment storage is busy. Freelay will retry the upload.";
 	}
 	if (details.status !== undefined && details.status >= 500) {
-		return "Attachment storage is temporarily unavailable. Relay will retry the upload.";
+		return "Attachment storage is temporarily unavailable. Freelay will retry the upload.";
 	}
 	if (details.message) {
 		return `Attachment storage error: ${details.message}`;

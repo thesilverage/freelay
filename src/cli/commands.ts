@@ -111,7 +111,7 @@ async function attachRemote(
 	folder.remote = remote;
 	ctx.sharedFolders.notifyListeners();
 	// Attachment is complete; connection may wait for replay or the network.
-	void folder.connect().catch((error) => console.warn("Relay folder connection failed", error));
+	void folder.connect().catch((error) => console.warn("Freelay folder connection failed", error));
 	return remote;
 }
 
@@ -119,7 +119,7 @@ function requireRemote(folder: CliSharedFolder): RemoteSharedFolder {
 	if (!folder.remote) {
 		throw new CliError(
 			"no_remote",
-			`${folder.path} is tracked but not on a Relay Server; use relay:folder:share`,
+			`${folder.path} is tracked but not on a relay; use relay:folder:share`,
 		);
 	}
 	return folder.remote;
@@ -152,7 +152,7 @@ const health: CliCommand = {
 			actionable,
 		};
 		const text = [
-			`Relay ${markdownText(ctx.version)}`,
+			`Freelay ${markdownText(ctx.version)}`,
 			ctx.login.loggedIn
 				? `User: ${markdownText(ctx.login.user?.email || ctx.login.user?.name || "signed in")}`
 				: "Logged out",
@@ -160,7 +160,7 @@ const health: CliCommand = {
 			data.backgroundSyncPaused ? "Background sync paused" : undefined,
 			metadata && metadata.status !== "ok"
 				? `Metadata: ${markdownText(metadata.message || metadata.status)}` : undefined,
-			folders.length ? table(["Folder", "Relay", "Status"], folders.map((f) => [
+			folders.length ? table(["Folder", "Freelay", "Status"], folders.map((f) => [
 				f.path, f.relay ?? "", f.status + (f.queued ? ` (${f.queued} queued)` : ""),
 			])) : "No tracked folders",
 			actionable.length ? "## Attention\n" + actionable.map((a) => `- ${markdownText(a.path)}: ${markdownText(a.label)}`).join("\n") : undefined,
@@ -309,7 +309,7 @@ const sharedFolder: CliCommand = {
 				kv([
 					["Shared Folder", folder.path],
 					["guid", folder.guid],
-					["Relay Server", relayLabel(folder)],
+					["relay", relayLabel(folder)],
 					["name on server", folder.remote?.name],
 					["private", folder.remote?.private],
 					["connected", folder.connected],
@@ -320,7 +320,7 @@ const sharedFolder: CliCommand = {
 				"",
 				"## Access",
 				"",
-				!folder.remote ? "(tracked locally; no Relay Server access)"
+				!folder.remote ? "(tracked locally; no relay access)"
 					: table(["user", "email", "id", "role"], users.map((u) => [u.user, u.email, u.userId, u.role])),
 				"",
 				"## File types",
@@ -362,7 +362,7 @@ function fileTypeSetting(enabled: boolean): CliCommand {
 			const type = required(params, "type") as keyof SyncFlags;
 			if (!SYNC_CATEGORIES.includes(type)) throw new CliError("invalid_value", `Unknown file type: ${type}`);
 			const category = folder.syncSettingsManager.getCategories()[type];
-			if (noStorage(ctx, folder) && category.requiresStorage) throw new CliError("no_storage", `${category.name} needs storage, and this Relay Server's plan has none`);
+			if (noStorage(ctx, folder) && category.requiresStorage) throw new CliError("no_storage", `${category.name} needs storage, and this relay's plan has none`);
 			if (!category.canToggle) throw new CliError("cannot_toggle", `${category.name} cannot be changed`);
 			await folder.syncSettingsManager.toggleCategory(type, enabled);
 			return { data: { path: folder.path, type, enabled }, text: `${category.name} sync ${enabled ? "enabled" : "disabled"} for ${folder.path}` };

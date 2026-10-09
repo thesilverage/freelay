@@ -16,7 +16,7 @@ export function conflictSideNames(conflict: ConflictValue): { ours: string; thei
 			case "remote":
 				return "Remote";
 			case "record":
-				if (other.source === "editor") return "Relay's copy";
+				if (other.source === "editor") return "Freelay's copy";
 				if (other.source === "file") return "Note in Obsidian";
 				return "Local";
 		}

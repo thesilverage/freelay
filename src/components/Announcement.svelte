@@ -40,7 +40,7 @@
 
 {#if status}
 	<div
-		class="system3-announcement-banner"
+		class="freelay-announcement-banner"
 		use:settingsCloseColor={status.color}
 		style:background-color={status.backgroundColor ?? "var(--color-accent)"}
 		style:color={status.color ?? "var(--text-on-accent)"}
@@ -49,20 +49,20 @@
 			<button class="announcement-primary" type="button" on:click={() => {
 				if (status?.versions) showRelease();
 				else if (status?.link) window.open(status.link, "_blank", "noopener,noreferrer");
-			}}><span class="system3-announcement">{@html minimark(status.status)}</span></button>
+			}}><span class="freelay-announcement">{@html minimark(status.status)}</span></button>
 		{:else}
-			<span class="system3-announcement">{@html minimark(status.status)}</span>
+			<span class="freelay-announcement">{@html minimark(status.status)}</span>
 		{/if}
 		<ServiceMessageActions actions={status.actions ?? []} onAction={action => { void plugin.openServiceMessageAction(action); }} />
 	</div>
 {/if}
 
 <style>
-	:global(.modal.mod-settings:has(.relay-settings > .system3-announcement-banner) > :is(.modal-header-button, .modal-close-button):not(.mod-start)) {
+	:global(.modal.mod-settings:has(.relay-settings > .freelay-announcement-banner) > :is(.modal-header-button, .modal-close-button):not(.mod-start)) {
 		color: var(--relay-announcement-color);
 	}
 
-	.system3-announcement-banner {
+	.freelay-announcement-banner {
 		flex: 0 0 auto;
 		min-width: 0;
 		padding: var(--size-4-3) var(--size-4-12);
@@ -71,12 +71,12 @@
 		overflow-wrap: anywhere;
 	}
 
-	.system3-announcement {
+	.freelay-announcement {
 		display: block;
 		color: inherit;
 	}
 
-	.system3-announcement-banner :global(.service-message-actions button) {
+	.freelay-announcement-banner :global(.service-message-actions button) {
 		min-width: 0;
 		color: inherit;
 		line-height: inherit;
@@ -101,7 +101,7 @@
 		cursor: pointer;
 	}
 
-	:global(.is-mobile) .system3-announcement-banner {
+	:global(.is-mobile) .freelay-announcement-banner {
 		padding-inline: var(--size-4-4);
 	}
 </style>

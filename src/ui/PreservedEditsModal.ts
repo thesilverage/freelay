@@ -21,7 +21,7 @@ export class PreservedEditsModal extends Modal {
 		titleEl.setText("Local edits held");
 		contentEl.createEl("p", {
 			text:
-				`Relay is keeping earlier edits to "${this.options.fileName}" ` +
+				`Freelay is keeping earlier edits to "${this.options.fileName}" ` +
 				`separately while this file follows the shared version. Keep them ` +
 				`to restore when you can write, or revert them now.`,
 		});

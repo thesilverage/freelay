@@ -5,23 +5,23 @@
 	export let viewModel: Readable<NoteStateViewModel>;
 </script>
 
-<div class="system3-note-state-header">
-	<div class="system3-note-state-title">{$viewModel.title}</div>
-	<div class="system3-note-state-pill system3-note-state-{$viewModel.verdict.cls}">
+<div class="freelay-note-state-header">
+	<div class="freelay-note-state-title">{$viewModel.title}</div>
+	<div class="freelay-note-state-pill freelay-note-state-{$viewModel.verdict.cls}">
 		{$viewModel.verdict.label}
 	</div>
 </div>
 
 {#each $viewModel.rows as row (row.label)}
-	<div class="system3-note-state-row">
-		<span class="system3-note-state-label">{row.label}</span>
+	<div class="freelay-note-state-row">
+		<span class="freelay-note-state-label">{row.label}</span>
 		<span
-			class:system3-note-state-ok={row.cls === "ok"}
-			class:system3-note-state-warn={row.cls === "warn"}
-			class:system3-note-state-bad={row.cls === "bad"}
-			class:system3-note-state-muted={row.cls === "muted"}
-			class:system3-note-state-mono={row.mono}
-			class="system3-note-state-value"
+			class:freelay-note-state-ok={row.cls === "ok"}
+			class:freelay-note-state-warn={row.cls === "warn"}
+			class:freelay-note-state-bad={row.cls === "bad"}
+			class:freelay-note-state-muted={row.cls === "muted"}
+			class:freelay-note-state-mono={row.mono}
+			class="freelay-note-state-value"
 		>
 			{row.value}
 		</span>

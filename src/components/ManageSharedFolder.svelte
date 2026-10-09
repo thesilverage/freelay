@@ -60,7 +60,7 @@
 
 <div style="padding: 1em; margin: 1em; background: var(--background-secondary)">
 	<p style="margin: 1em; text-align: center">
-		This Shared Folder is not on a Relay Server, or else you do not have
+		This Shared Folder is not on a relay, or else you do not have
 		permission to access it.
 	</p>
 </div>

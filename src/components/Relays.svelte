@@ -10,7 +10,6 @@
 		hasPermissionParents,
 		type Provider,
 		type Relay,
-		type RelaySubscription,
 		type RemoteSharedFolder,
 	} from "../Relay";
 	import type Live from "src/main";
@@ -21,14 +20,12 @@
 	import { debounce, Notice } from "obsidian";
 	import SecretText from "./SecretText.svelte";
 	import { flags } from "src/flagManager";
-	import { moment } from "obsidian";
 	import { AddToVaultModal } from "src/ui/AddToVaultModal";
 	import { normalizePath } from "obsidian";
 	import { join } from "path-browserify";
 
 	export let plugin: Live;
 	export let relays: ObservableMap<string, Relay>;
-	export let subscriptions: ObservableMap<string, RelaySubscription>;
 
 	const sharedFolders = plugin.sharedFolders;
 
@@ -43,25 +40,6 @@
 			return;
 		}
 		dispatch("manageRelay", { relay });
-	}
-
-	function getActiveForMessage(cancelAtDate: Date | null): string {
-		if (!cancelAtDate) {
-			return "Active";
-		}
-		const now = moment.utc();
-		const cancelAt = moment.utc(cancelAtDate);
-		const daysRemaining = cancelAt.diff(now, "days");
-
-		if (daysRemaining <= 0) {
-			return "Subscription has ended";
-		} else if (daysRemaining === 1) {
-			return "Active for 1 more day";
-		} else if (daysRemaining > 31) {
-			return `Ends on ${cancelAt.format("YYYY-MM-DD")}`;
-		} else {
-			return `Active for ${daysRemaining} more days`;
-		}
 	}
 
 	function handleManageSharedFolder(folder: SharedFolder, relay?: Relay) {
@@ -82,11 +60,11 @@
 		invalidShareKey = false;
 	}
 
-	async function handleJoinRelayFromInvite(shareKey: string) {
+	async function handleJoinRelayFromInvite(code: string) {
 		try {
 			invitePending = true;
 			const relay = await plugin.relayManager
-				.acceptInvitation(shareKey)
+				.acceptInvitation(code)
 				.catch((response) => {
 					if (response.status === 429) {
 						new Notice("Slow down");
@@ -94,6 +72,7 @@
 					throw response;
 				});
 			invitePending = false;
+			shareKey = "";
 			dispatch("joinRelay", { relay });
 		} catch (e) {
 			invalidShareKey = true;
@@ -155,7 +134,7 @@
 		if (availableFolders.length === 0) {
 			if (totalRemoteFolders === 0) {
 				noFoldersMessage =
-					"Join a Relay Server, or add a Shared Folder on another device.";
+					"Join a relay, or add a Shared Folder on another device.";
 			} else {
 				noFoldersMessage = "All remote folders are already in your vault.";
 			}
@@ -192,7 +171,7 @@
 	}
 </script>
 
-<SettingItemHeading name="Join a Relay Server"></SettingItemHeading>
+<SettingItemHeading name="Join a relay"></SettingItemHeading>
 <SettingGroup>
 	<SettingItem
 		name="Share key"
@@ -210,7 +189,7 @@
 			invalid={invalidShareKey}
 		/>
 		<button
-			class="mod-cta system3-button"
+			class="mod-cta freelay-button"
 			data-action="join-relay"
 			disabled={invitePending}
 			on:click={debounce(() => handleJoinRelayFromInvite(shareKey))}
@@ -221,10 +200,10 @@
 </SettingGroup>
 
 <SettingItemHeading
-	helpText="A Relay Server coordinates real-time updates between collaborators. You can add collaborators and share folders on the Relay Server's settings page."
+	helpText="A relay coordinates real-time updates between collaborators. You can add collaborators and share folders on the relay's settings page."
 >
 	<span slot="name" style="display: inline-flex; align-items: center">
-		Relay Servers
+		relays
 	</span>
 </SettingItemHeading>
 <SettingGroup>
@@ -234,7 +213,7 @@
 				{#if relay.name}
 					{relay.name}
 				{:else}
-					<span class="faint">(Untitled Relay Server)</span>
+					<span class="faint">(Untitled relay)</span>
 				{/if}
 			</Satellite>
 			<SettingsControl
@@ -247,8 +226,9 @@
 	{/each}
 	<SlimSettingItem description="" name="">
 		<button
-			class="mod-cta system3-button"
+			class="mod-cta freelay-button"
 			on:click={debounce(() => handleCreateRelay())}
+			disabled={!plugin.loginManager.profile?.ownerEligible}
 		>
 			Create
 		</button>
@@ -257,12 +237,12 @@
 
 <SettingItemHeading
 	name="My vault"
-	helpText="The following Shared Folders have been added to your vault. You can see what Relay Server a Shared Folder is connected to below."
+	helpText="The following Shared Folders have been added to your vault. You can see what relay a Shared Folder is connected to below."
 ></SettingItemHeading>
 <SettingGroup>
 	{#if $sharedFolders.items().length === 0}
 		<SettingItem
-			description="No shared folders on this device. Share folders from a Relay Server's settings page to begin collaboration."
+			description="No shared folders on this device. Share folders from a relay's settings page to begin collaboration."
 		/>
 	{/if}
 	{#each $sharedFolders.items().sort(folderSort) as folder}
@@ -297,7 +277,7 @@
 
 	<SlimSettingItem name="">
 		<button
-			class="mod-cta system3-button"
+			class="mod-cta freelay-button"
 			aria-label="Add remote folder to vault"
 			on:click={debounce(handleAddFolder)}
 			style="max-width: 11em"
@@ -306,52 +286,6 @@
 		</button>
 	</SlimSettingItem>
 </SettingGroup>
-{#if $subscriptions.values().filter((s) => $relays.has(s.relayId)).length > 0}
-	<div class="spacer"></div>
-	<SettingItemHeading
-		name="Subscriptions"
-		helpText="Subscriptions are tied to each Relay Server, not to your user account. Modify and cancel your subscription via our payment processor Stripe."
-	></SettingItemHeading>
-	<SettingGroup>
-		{#each $subscriptions.values().filter((s) => $relays.has(s.relayId)) as subscription}
-			<SlimSettingItem
-				name=""
-				description={subscription.cancelAt
-					? getActiveForMessage(subscription.cancelAt)
-					: ""}
-			>
-				<Satellite slot="name" relay={subscription.relay} on:manageRelay>
-					{#if subscription.relay.name}
-						{subscription.relay.name}
-					{:else}
-						<span class="faint">(Untitled Relay Server)</span>
-					{/if}
-				</Satellite>
-				<button
-					class="mod-cta system3-button"
-					on:click={debounce(async () => {
-						if (!subscription.token) {
-							const token =
-								await plugin.relayManager.getSubscriptionToken(subscription);
-							subscription.token = token;
-						}
-						const sub_id = subscription.id;
-						const token = subscription.token;
-						window.open(
-							plugin.buildApiUrl(
-								`/subscriptions/${sub_id}/manage?token=${token}`,
-							),
-							"_blank",
-						);
-					})}
-				>
-					Manage
-				</button>
-			</SlimSettingItem>
-		{/each}
-	</SettingGroup>
-{/if}
-
 <style>
 	span.faint {
 		color: var(--text-faint);

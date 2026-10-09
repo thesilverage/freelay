@@ -24,8 +24,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_no_noninteractive_tabindex -->
 <div
-	class="nav-file-tag system3-{kind}"
-	class:system3-pill-button={!!onClick}
+	class="nav-file-tag freelay-{kind}"
+	class:freelay-pill-button={!!onClick}
 	aria-label={onClick ? `${label} · Click for details` : label}
 	data-reason={reason}
 	role={onClick ? "button" : undefined}

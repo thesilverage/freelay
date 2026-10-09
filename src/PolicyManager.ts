@@ -196,7 +196,7 @@ export class PolicyManager implements IPolicyManager {
 		}
 
 		try {
-			const allowed = policy.evaluate(request, this.relayManager);
+			const allowed = this.relayManager.authorize(request.principal, request.action, request.resource);
 			return {
 				allowed,
 				policy: policyKey,
@@ -243,7 +243,7 @@ export class PolicyManager implements IPolicyManager {
 		return new ObservablePermission(() => {
 			const result = this.isAllowed(request);
 			return result.allowed;
-		}, dependencies);
+		}, [...dependencies, this.relayManager.relays, this.relayManager.remoteFolders]);
 	}
 
 	getPolicies(): string[] {

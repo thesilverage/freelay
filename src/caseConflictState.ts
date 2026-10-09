@@ -140,7 +140,7 @@ export interface CaseConflictExplanation {
 	actions: { label: string; path: string; kind: "file" | "folder" }[];
 }
 
-const DOCS_URL = "https://docs.relay.md/";
+const DOCS_URL = "https://github.com/thesilverage/freelay/blob/main/README.md";
 
 export function explainCaseConflict(
 	state: CaseConflictState,

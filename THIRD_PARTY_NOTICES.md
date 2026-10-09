@@ -1,5 +1,11 @@
 # Third-party notices
 
+## Relay
+
+Freelay is an independent fork of [Relay](https://github.com/No-Instructions/Relay).
+The original copyright and MIT license are retained in [LICENSE](LICENSE).
+Freelay's modifications are maintained independently of the upstream project.
+
 ## node-diff3 / Project Synchrotron
 
 Portions of `src/merge-hsm/diff3.ts` are derived from node-diff3, whose diff

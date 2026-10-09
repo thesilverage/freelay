@@ -124,7 +124,7 @@ export const FeatureFlagSchema: {
 		default: false,
 		category: "labs",
 		title: "Native networking",
-		description: "Use Node's HTTP stack for Relay requests on desktop. Responses are uncompressed. May not work with system proxies or private certificates. Has no effect on mobile.",
+		description: "Use Node's HTTP stack for Freelay requests on desktop. Responses are uncompressed. May not work with system proxies or private certificates. Has no effect on mobile.",
 	},
 	enableBackupNetworkProbe: {
 		default: true,
@@ -138,7 +138,7 @@ export const FeatureFlagSchema: {
 		category: "debugging",
 		title: "HTTP response logging",
 		description:
-			"Log HTTP status, method, URL, and response bodies from Relay network requests.",
+			"Log HTTP status, method, URL, and response bodies from Freelay network requests.",
 	},
 	enableVerifyUploads: {
 		default: false,
@@ -236,7 +236,7 @@ export const FeatureFlagSchema: {
 	enableRelayReaderRole: {
 		default: false,
 		category: "danger",
-		title: "Relay Reader role",
+		title: "Freelay Reader role",
 		description:
 			"Offer the Reader role for relay membership. Requires relay Reader support on the server.",
 	},

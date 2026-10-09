@@ -29,8 +29,8 @@ export function situationCopy(
 		return {
 			view: "diff",
 			copy: {
-				title: "Relay hit a bug merging this note",
-				text: "Relay couldn’t merge this note’s changes, which should never happen. Both versions are shown below so nothing is lost. [[Send a bug report]] so we can fix it.",
+				title: "Freelay hit a bug merging this note",
+				text: "Freelay couldn’t merge this note’s changes, which should never happen. Both versions are shown below so nothing is lost. [[Send a bug report]] so we can fix it.",
 				ours: "Keep my note",
 				theirs: "Apply changes",
 			},
@@ -40,10 +40,10 @@ export function situationCopy(
 		return {
 			view: "pick",
 			copy: {
-				title: "Relay hit a bug while you were typing",
-				text: "What you typed and Relay’s copy of this note came apart, which should never happen. Your text is shown against Relay’s copy so nothing is lost. [[Send a bug report]] so we can fix it.",
+				title: "Freelay hit a bug while you were typing",
+				text: "What you typed and Freelay’s copy of this note came apart, which should never happen. Your text is shown against Freelay’s copy so nothing is lost. [[Send a bug report]] so we can fix it.",
 				ours: "Keep what I typed",
-				theirs: "Use Relay’s copy",
+				theirs: "Use Freelay’s copy",
 			},
 		};
 	}
@@ -53,15 +53,15 @@ export function situationCopy(
 				view: "diff",
 				copy: {
 					...outside,
-					text: "The file on disk differs from the note, and Relay has no record of the version they started from. Review the change below, then apply it or keep your note as it is.",
+					text: "The file on disk differs from the note, and Freelay has no record of the version they started from. Review the change below, then apply it or keep your note as it is.",
 				},
 			};
 		}
 		return {
 			view: "pick",
 			copy: {
-				title: "Relay is missing a merge baseline for this note",
-				text: "The local copy and the shared note have both changed, and Relay has no record of the version they started from, so it can’t merge them automatically. After you resolve these differences, Relay will keep a baseline and merge this note on its own from then on.",
+				title: "Freelay is missing a merge baseline for this note",
+				text: "The local copy and the shared note have both changed, and Freelay has no record of the version they started from, so it can’t merge them automatically. After you resolve these differences, Freelay will keep a baseline and merge this note on its own from then on.",
 				ours: "Use local copy",
 				theirs: "Use remote copy",
 			},
@@ -72,8 +72,8 @@ export function situationCopy(
 		return {
 			view: "pick",
 			copy: {
-				title: "This file was edited while Relay wasn’t running",
-				text: "The file on disk and the shared note both changed since Relay last saw them. Relay merged the changes that don’t overlap; where both changed the same lines, both versions are shown below.",
+				title: "This file was edited while Freelay wasn’t running",
+				text: "The file on disk and the shared note both changed since Freelay last saw them. Freelay merged the changes that don’t overlap; where both changed the same lines, both versions are shown below.",
 				ours: "Use local copy",
 				theirs: "Use remote copy",
 			},
@@ -84,7 +84,7 @@ export function situationCopy(
 		view: "pick",
 		copy: {
 			title: `You and ${who} both changed this note since it last synced`,
-			text: "Relay merged the changes that don’t overlap. Where you both changed the same lines, both versions are shown below.",
+			text: "Freelay merged the changes that don’t overlap. Where you both changed the same lines, both versions are shown below.",
 			ours: "Keep all of mine",
 			theirs: collaborator ? `Use all of ${collaborator}’s` : "Use all of theirs",
 		},

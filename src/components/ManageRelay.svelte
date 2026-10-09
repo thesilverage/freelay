@@ -1,13 +1,10 @@
 <script lang="ts">
-	import SecretText from "./SecretText.svelte";
+	import InvitationPanel from "./InvitationPanel.svelte";
 	import SettingItemHeading from "./SettingItemHeading.svelte";
-	import { customFetch } from "../customFetch";
 	import { offeredRelayRoles,
 		hasPermissionParents,
 		type Relay,
-		type RelayInvitation,
 		type RelayRole,
-		type RelaySubscription,
 		type RemoteSharedFolder,
 		type Role,
 	} from "src/Relay";
@@ -25,14 +22,12 @@
 	import SettingsControl from "./SettingsControl.svelte";
 	import Lock from "./Lock.svelte";
 	import Breadcrumbs from "./Breadcrumbs.svelte";
-	import DiskUsage from "./DiskUsage.svelte";
 	import { ShareFolderModal } from "src/ui/ShareFolderModal";
 	import { AddToVaultModal } from "src/ui/AddToVaultModal";
 	import { FolderSuggestModal } from "src/ui/FolderSuggestModal";
 	import SettingItem from "./SettingItem.svelte";
 	import SlimSettingItem from "./SlimSettingItem.svelte";
 	import SettingGroup from "./SettingGroup.svelte";
-	import RelayConfigBlock from "./RelayConfigBlock.svelte";
 	import { uuidv4 } from "lib0/random";
 
 	export let relay: Relay;
@@ -40,9 +35,6 @@
 	let viewAsAdmin = writable(false);
 	let hintDismissed = writable(false);
 	export let plugin!: Live;
-	let loadingRelayConfig = false;
-	let relayConfigError: string | null = null;
-	let relayConfigToml = "";
 	const shouldShowToggle = derived(
 		[
 			remoteFolders,
@@ -83,58 +75,15 @@
 	);
 
 	function isNewUser(): boolean {
-		const created = plugin.loginManager.pb.authStore.model?.created;
-		if (!created) return false;
-		const createdDate = new Date(created);
-		const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-		return createdDate > oneDayAgo;
+		return false;
 	}
 	export let relayRoles: ObservableMap<string, RelayRole>;
 
-	import { moment } from "obsidian";
 	import AccountSettingItem from "./AccountSettingItem.svelte";
-	import { minimark } from "src/minimark";
 	import { handleServerError } from "../utils/toastStore";
 
 	import { ownerWin } from "./ownerWindow";
-	plugin.relayManager.refreshRelay(relay);
-
-	async function checkRelayHost(relay: Relay) {
-		const response = await plugin.loginManager.checkRelayHost(relay.guid);
-		if (response.status === 200) {
-			return response.json;
-		}
-	}
-
-	function getActiveForMessage(cancelAtDate: Date | null): string {
-		if (!cancelAtDate) {
-			return "Active";
-		}
-		const now = moment.utc();
-		const cancelAt = moment.utc(cancelAtDate);
-		const daysRemaining = cancelAt.diff(now, "days");
-
-		if (daysRemaining <= 0) {
-			return "Subscription has ended";
-		} else if (daysRemaining === 1) {
-			return "Active for 1 more day";
-		} else if (daysRemaining > 31) {
-			return `Ends on ${cancelAt.format("YYYY-MM-DD")}`;
-		} else {
-			return `Active for ${daysRemaining} more days`;
-		}
-	}
-
-	function formatBytes(bytes: number, decimals = 2) {
-		if (bytes === 0) return "0 MB";
-
-		const k = 1024;
-		const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-		return (bytes / Math.pow(k, i)).toFixed(decimals) + " " + sizes[i];
-	}
+	void plugin.relayManager.refreshRelay(relay).catch(() => undefined);
 
 	function userSort(a: RelayRole, b: RelayRole) {
 		if (a.role === "Owner" && b.role === "Owner") {
@@ -159,22 +108,6 @@
 		return (priority[a.name] ?? 999) - (priority[b.name] ?? 999);
 	}
 
-	const subscriptions = $relay.subscriptions;
-	const subscription = derived($subscriptions, ($subscriptions) => {
-		if ($subscriptions.values().length === 0) {
-			return undefined;
-		}
-		const subscription = $subscriptions.values()[0];
-		if (!subscription.token) {
-			plugin.relayManager.getSubscriptionToken(subscription).then((token) => {
-				subscription.token = token;
-			});
-		}
-		return subscription;
-	});
-
-	const storageQuota = $relay.storageQuota;
-
 	const roles = $relayRoles.filter((role: RelayRole) => {
 		return role.relayId === relay.id;
 	});
@@ -188,143 +121,25 @@
 	});
 	const dispatch = createEventDispatcher();
 
-	async function fetchRelayConfig() {
-		if (!plugin.relayManager?.pb) {
-			relayConfigError = "Not connected to relay service";
-			return;
-		}
-
-		loadingRelayConfig = true;
-		relayConfigError = null;
-
-		try {
-			// Use customFetch directly since PocketBase's .send() tries to parse as JSON
-			const fullUrl =
-				plugin.relayManager.pb.baseUrl +
-				`/api/collections/relays/records/${relay.id}/relay.toml`;
-			const response = await customFetch(fullUrl, {
-				method: "GET",
-				headers: {
-					Authorization: plugin.relayManager.pb.authStore.token
-						? `Bearer ${plugin.relayManager.pb.authStore.token}`
-						: "",
-				},
-			});
-
-			// Get the text from the response
-			const tomlTemplate = await response.text();
-
-			// Replace {url} placeholder with actual provider URL
-			relayConfigToml = tomlTemplate.replace(
-				/\{url\}/g,
-				relay.provider?.url || "",
-			);
-		} catch (err) {
-			relayConfigError =
-				err instanceof Error
-					? err.message
-					: "Failed to fetch relay configuration";
-		} finally {
-			loadingRelayConfig = false;
-		}
-	}
-
-	// Fetch config when component mounts
-	onMount(() => {
-		if (nameInput && nameInput.value === "") {
-			nameInput.focus();
-		}
-
-		// Fetch relay config if it's a self-hosted relay
-		if (relay.provider?.selfHosted) {
-			fetchRelayConfig();
-		}
-	});
-
-	async function handleUpgrade(relay: Relay) {
-		if (!plugin.loginManager?.user) {
-			return;
-		}
-		const payload = {
-			relay: relay.id,
-			quantity: 10,
-			user_email: plugin.loginManager.getAccountEmailForRequest(),
-		};
-		const encodedPayload = btoa(JSON.stringify(payload))
-			.replace(/\+/g, "-")
-			.replace(/\//g, "_")
-			.replace(/=+$/, "");
-		window.open(plugin.buildApiUrl(`/subscribe/${encodedPayload}`), "_blank");
-	}
-
-	async function handleManage(subscription: RelaySubscription) {
-		const token = subscription.token;
-		const sub_id = subscription.id;
-		window.open(
-			plugin.buildApiUrl(`/subscriptions/${sub_id}/manage?token=${token}`),
-			"_blank",
-		);
-	}
-
-	async function handleCancel(subscription: RelaySubscription) {
-		const token = subscription.token;
-		const sub_id = subscription.id;
-		window.open(
-			plugin.buildApiUrl(`/subscriptions/${sub_id}/cancel?token=${token}`),
-			"_blank",
-		);
-	}
-
-	function handleKeyToggle(checked: boolean) {
-		if ($canManageSharing) {
-			isShareKeyEnabled.set(checked);
-
-			plugin.relayManager
-				.toggleRelayInvitation(relayInvitation, $isShareKeyEnabled)
-				.then((invite) => {
-					isShareKeyEnabled.set(invite.enabled);
-				})
-				.catch((error) => {
-					// Revert the toggle state
-					isShareKeyEnabled.set(!checked);
-					handleServerError(error, "Failed to toggle share key");
-				});
-		}
-	}
-
 	async function handleLeaveRelay() {
-		plugin.relayManager.leaveRelay(relay);
-		dispatch("goBack", { clear: true });
+		try {
+			await plugin.relayManager.leaveRelay(relay);
+			dispatch("goBack", { clear: true });
+		} catch (error) {
+			handleServerError(error);
+		}
 	}
 
 	async function goBack() {
 		dispatch("goBack", { clear: true });
 	}
 
-	let relayInvitation: RelayInvitation;
-	let isShareKeyEnabled = writable(true);
 	let isEditingMembers = writable(false);
-	plugin.relayManager.getRelayInvitation(relay).then((invite) => {
-		if (invite) {
-			relayInvitation = invite;
-			isShareKeyEnabled.set(invite.enabled);
-		}
-	});
-
-	async function rotateKey() {
-		if (relayInvitation) {
-			try {
-				relayInvitation = await plugin.relayManager.rotateKey(relayInvitation);
-			} catch (error) {
-				handleServerError(error, "Failed to rotate key.");
-			}
-		}
-	}
 
 	let updating = writable(false);
 
 	const updateRelay = plugin.timeProvider.debounce(() => {
-		plugin.relayManager.updateRelay(relay).then(() => {
+		plugin.relayManager.updateRelay(relay).catch(handleServerError).finally(() => {
 			updating.set(false);
 		});
 	}, 500);
@@ -356,9 +171,14 @@
 		}
 	}
 
-	function handleDestroy() {
-		plugin.relayManager.destroyRelay(relay);
-		dispatch("goBack", {});
+	let confirmDeletion = false;
+	let deleting = false;
+	async function handleDestroy() {
+		if (!confirmDeletion || deleting) return;
+		deleting = true;
+		try { await plugin.relayManager.destroyRelay(relay); dispatch("goBack", {}); }
+		catch (error) { handleServerError(error, "Could not delete relay."); }
+		finally { deleting = false; }
 	}
 
 	function handleKick(relay_role: RelayRole) {
@@ -425,11 +245,6 @@
 		["relay", "delete"],
 		relay,
 	);
-	const canManageSubscription = plugin.relayManager.userCan(
-		["subscription", "manage"],
-		relay,
-	);
-
 	function onChoose(folderPath: string): Promise<SharedFolder>;
 	function onChoose(
 		folderPath: string,
@@ -484,14 +299,7 @@
 			}
 
 			if (isPrivate && grants && grants.length > 0) {
-				await Promise.all(
-					grants.map((grant) =>
-						plugin.relayManager.addFolderRole(
-							remote,
-							grant,
-						),
-					),
-				);
+				for (const grant of grants) await plugin.relayManager.addFolderRole(remote, grant);
 			}
 
 			folder.connect();
@@ -588,7 +396,7 @@
 	{:else if $remoteFolders.values().length === 0 && $relay.owner}
 		<div class="hint-callout-wrapper">
 			<Callout title="Hint">
-				Add a Shared Folder to this Relay.
+				Add a Shared Folder to this Freelay.
 			</Callout>
 			<button class="hint-dismiss" on:click={() => hintDismissed.set(true)} aria-label="Dismiss hint">
 				<X class="svg-icon" />
@@ -598,7 +406,7 @@
 {/if}
 
 {#if $canRenameRelay}
-	<SettingItem name="Name" description="Set the Relay Server's name.">
+	<SettingItem name="Name" description="Set the relay's name.">
 		<input
 			type="text"
 			spellcheck="false"
@@ -606,13 +414,13 @@
 			bind:value={relay.name}
 			bind:this={nameInput}
 			on:input={handleNameChange}
-			class={($updating ? "system3-updating" : "") +
-				($nameValid ? "" : " system3-input-invalid")}
+			class={($updating ? "freelay-updating" : "") +
+				($nameValid ? "" : " freelay-input-invalid")}
 		/>
 	</SettingItem>
 {/if}
 
-<SettingItemHeading name="Shared Folders on this Relay Server">
+<SettingItemHeading name="Shared Folders on this relay">
 	{#if $canManageUsers && $shouldShowToggle}
 		<button
 			class="admin-toggle-btn"
@@ -666,7 +474,7 @@
 			<button
 				class="mod-cta"
 				data-action="share-folder"
-				aria-label="Select a folder to share it with this Relay Server"
+				aria-label="Select a folder to share it with this relay"
 				on:click={debounce(() => {
 					if (relay.version === 0 && !Platform.isMobile) {
 						// For relay version 0, go directly to folder selection.
@@ -759,7 +567,7 @@
 
 	<SettingItem description="" name="">
 		<span class="faint"
-			>{$roles.values().length} of {$relay.userLimit} seats used
+			>{$roles.values().length} members
 		</span>
 	</SettingItem>
 </SettingGroup>
@@ -767,240 +575,22 @@
 <!--
 
     <SettingItem name="" description="">
-		<button class="mod-cta system3-button" on:click={() => handleAddUser()}>
+		<button class="mod-cta freelay-button" on:click={() => handleAddUser()}>
 			Add User
 		</button>
 	</SettingItem>
     -->
-<SettingItemHeading
-	name="Sharing"
-	helpText="Share keys can be shared with collaborators so that they can join the Relay Server. Once you have added all of your collaborators, you can disable the share key to prevent anyone from joining, even if they have the key."
-></SettingItemHeading>
-
-<SettingGroup>
-	<SlimSettingItem
-		name={$canManageSharing ? "Enable key sharing" : "Key sharing"}
-	>
-		<fragment slot="description">
-			{#if $canManageSharing}
-				<div class="setting-item-description">
-					Allow others to join this Relay Server with a Share Key.
-				</div>
-			{:else if $isShareKeyEnabled}
-				<div class="setting-item-description">
-					The owner of this Relay Server has enabled key sharing.
-				</div>
-			{:else}
-				<div class="setting-item-description mod-warning">
-					The owner of this Relay Server has disabled key sharing.
-				</div>
-			{/if}
-		</fragment>
-		<div class="setting-item-control">
-			{#if !$canManageSharing}
-				<Lock />
-			{/if}
-			<div
-				role="checkbox"
-				aria-checked={$isShareKeyEnabled}
-				tabindex="0"
-				on:keypress={() => handleKeyToggle(!$isShareKeyEnabled)}
-				class={$canManageSharing
-					? "checkbox-container"
-					: "checkbox-container checkbox-locked"}
-				class:is-enabled={$isShareKeyEnabled}
-				on:click={() => handleKeyToggle(!$isShareKeyEnabled)}
-			>
-				<input
-					type="checkbox"
-					checked={$isShareKeyEnabled}
-					disabled={!$canManageSharing}
-					on:change={(e) => handleKeyToggle(e.currentTarget.checked)}
-				/>
-				<div class="checkbox-toggle"></div>
-			</div>
-		</div>
-	</SlimSettingItem>
-
-	{#if $isShareKeyEnabled}
-		<SettingItem
-			name="Share Key"
-			description="Share this key with your collaborators."
-		>
-			<div class="share-key-container">
-				{#if !$isShareKeyEnabled}
-					<span
-						role="button"
-						tabindex="0"
-						class="input-like share-key-disabled-notice"
-					>
-						Share key is currently disabled
-					</span>
-				{:else}
-					<SecretText
-						value={relayInvitation ? relayInvitation.key : "please wait..."}
-						disabled={!$isShareKeyEnabled}
-						placeholder="please wait..."
-						readonly={true}
-						copyOnClick={true}
-						successMessage="Invite link copied"
-					/>
-				{/if}
-			</div>
-		</SettingItem>
-
-		{#if $canManageSharing}
-			<SettingItem
-				name="Rotate key"
-				description="Create a new share key. The old key will no longer work."
-			>
-				<button on:click={debounce(rotateKey)} class="mod-destructive">
-					Rotate key
-				</button>
-			</SettingItem>
-		{/if}
-	{/if}
-</SettingGroup>
-{#if $canManageSubscription}
-	<SettingItemHeading name="Plan" />
-	<SettingGroup>
-		{#if $subscription}
-			<SettingItem name={`Plan: ${$relay.plan}`} description="">
-				<fragment slot="description">
-					{$relay.cta}
-				</fragment>
-				<button
-					on:click={debounce(() => {
-						handleManage($subscription);
-					})}
-				>
-					Manage
-				</button>
-
-				{#if $subscriptions.values()[0].active && !$subscriptions.values()[0].cancelAt}
-					<button
-						class="mod-destructive"
-						on:click={debounce(() => {
-							handleCancel($subscription);
-						})}
-					>
-						Cancel
-					</button>
-				{/if}
-			</SettingItem>
-			{#if !$subscriptions.values()[0].active || $subscriptions.values()[0].cancelAt}
-				<SettingItem description="">
-					<span slot="name" class="mod-warning">Status: Cancelled</span>
-					{getActiveForMessage($subscriptions.values()[0].cancelAt)}
-				</SettingItem>
-			{/if}
-		{:else}
-			<SettingItem
-				name={`Plan: ${$relay.plan}`}
-				description={$relay.cta || "Thanks for supporting Relay development"}
-			>
-				<button
-					class="mod-cta"
-					on:click={debounce(() => {
-						handleUpgrade($relay);
-					})}
-				>
-					Upgrade
-				</button>
-			</SettingItem>
-		{/if}
-	</SettingGroup>
-	{#if $storageQuota && $storageQuota.quota > 0}
-		<SettingItemHeading name="Storage"></SettingItemHeading>
-		<SettingGroup>
-			{#if $storageQuota.metered}
-				<DiskUsage
-					diskUsagePercentage={Math.round(
-						($storageQuota.usage * 100) / $storageQuota.quota,
-					)}
-				/>
-				<SlimSettingItem
-					name="Usage"
-					description="Storage for images, audio, video, etc"
-				>
-					{formatBytes($storageQuota.usage)}
-				</SlimSettingItem>
-
-				<SlimSettingItem
-					name="Total storage"
-					description="Total available storage."
-				>
-					{formatBytes($storageQuota.quota)}
-				</SlimSettingItem>
-			{:else}
-				<SlimSettingItem
-					name="Total storage"
-					description="Total available storage."
-				>
-					Unmetered by Relay
-				</SlimSettingItem>
-			{/if}
-
-			<SlimSettingItem
-				name="File size limit"
-				description="Maximum supported file size."
-			>
-				{formatBytes($storageQuota.maxFileSize)}
-			</SlimSettingItem>
-		</SettingGroup>
-	{/if}
-
-	{#if relay.provider && relay.provider.selfHosted}
-		<SettingItemHeading name="Host"></SettingItemHeading>
-		<SettingGroup>
-			<SettingItem name="URL" description="">
-				{relay.provider.url}
-			</SettingItem>
-			{#await checkRelayHost(relay) then response}
-				{#if response.level === "warning"}
-					<SettingItem name="Status" description="">
-						<p class="mod-warning relay-host-check">
-							{@html minimark(response.status)}
-
-							{#if response.link}
-								<br />
-								<a href={response.link.url}>
-									{@html minimark(response.link.text)}
-								</a>
-							{/if}
-						</p>
-					</SettingItem>
-				{/if}
-			{/await}
-			{#if relay.provider.publicKey}
-				<div class="relay-auth-section">
-					<div class="setting-item-name">Relay Server Configuration</div>
-					<div class="setting-item-description">
-						Copy this configuration to your Relay Server's TOML file.
-					</div>
-					{#if loadingRelayConfig}
-						<div class="loading-message">Loading configuration...</div>
-					{:else if relayConfigError}
-						<div class="error-message">{relayConfigError}</div>
-					{:else if relayConfigToml}
-						<RelayConfigBlock toml={relayConfigToml} />
-					{:else}
-						<div class="error-message">No configuration available</div>
-					{/if}
-				</div>
-			{/if}
-		</SettingGroup>
-	{/if}
+{#if $canManageSharing}
+	<InvitationPanel {plugin} relayId={relay.id} />
 {/if}
-
 {#if !$relay.owner || $relayRoles
 		.filter((role) => role.role === "Owner" && role.relayId === relay.id)
 		.values().length > 1}
 	<SettingItemHeading name="Membership"></SettingItemHeading>
 	<SettingGroup>
 		<SettingItem
-			name="Leave Relay Server"
-			description="Leave the Relay Server. Local data is preserved."
+			name="Leave relay"
+			description="Leave the relay. Local data is preserved."
 		>
 			<button
 				class="mod-warning"
@@ -1019,22 +609,11 @@
 	<SettingItemHeading name="Danger zone"></SettingItemHeading>
 	<SettingGroup>
 		<SettingItem
-			name="Destroy Relay Server"
-			description="This will destroy the Relay Server (deleting all data on the server). Local data is preserved."
+			name="Delete relay"
+			description="Irreversible. Stops new access now; the administrator’s collector removes stored data after the safety delay. Local files are preserved."
 		>
-			{#if $subscriptions.values().length > 0 && !$subscriptions.values()[0].cancelAt}
-				<button
-					disabled={true}
-					class="mod-warning"
-					aria-label="Cancel subscription to destroy Relay Server."
-				>
-					Destroy
-				</button>
-			{:else}
-				<button class="mod-warning" on:click={debounce(handleDestroy)}>
-					Destroy
-				</button>
-			{/if}
+			<label><input type="checkbox" bind:checked={confirmDeletion} /> Permanently delete this relay and every shared folder</label>
+			<button class="mod-warning" disabled={!confirmDeletion || deleting} on:click={handleDestroy}>Delete relay</button>
 		</SettingItem>
 	</SettingGroup>
 {/if}
@@ -1092,11 +671,11 @@
 	.relay-host-check {
 		text-align: right;
 	}
-	input.system3-updating {
+	input.freelay-updating {
 		border: 1px solid var(--color-accent) !important;
 	}
 
-	input.system3-input-invalid {
+	input.freelay-input-invalid {
 		border: 1px solid var(--color-red) !important;
 	}
 

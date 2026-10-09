@@ -302,7 +302,7 @@
 	let rootEl: HTMLElement;
 </script>
 
-<div class="modal-title">{version ? "Relay download" : "Relay releases"}</div>
+<div class="modal-title">{version ? "Freelay download" : "Freelay releases"}</div>
 <div class="modal-content" bind:this={rootEl}>
 	<div class="settings-spacer"></div>
 

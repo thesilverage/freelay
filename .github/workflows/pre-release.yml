@@ -1,7 +1,7 @@
-name: Beta Releases
+name: Pre-releases
 
-# A tag that differs from manifest.json's version publishes a prerelease
-# whose manifest carries the tag as its version.
+# An alpha, beta, or rc tag based on manifest.json's version publishes a draft
+# prerelease whose artifact manifest carries the complete tag as its version.
 # Tag and version handling lives in .github/ci/release.sh.
 
 on:
@@ -33,9 +33,13 @@ jobs:
     - name: Use Node.js
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
-        node-version: '20.x'
+        node-version: '22'
     - run: npm ci
-    - run: npm run beta
+    - run: npm test
+    - run: npm run lint
+    - run: npm run release
+      env:
+        FREELAY_VERSION: ${{ github.ref_name }}
     - name: Set release artifact manifest version
       run: .github/ci/release.sh set-version "$GITHUB_REF_NAME"
     - name: Generate artifact attestations
@@ -48,5 +52,6 @@ jobs:
     - uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
       with:
         artifacts: "main.js,styles.css,manifest.json"
-        immutableCreate: true
+        name: ${{ github.ref_name }}
+        draft: true
         prerelease: true

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import SettingItemHeading from "./SettingItemHeading.svelte";
-	import { offeredFolderRoles, type Relay, type RelayRole, type FolderRole, type RemoteSharedFolder, type Role } from "../Relay";
+	import InvitationPanel from "./InvitationPanel.svelte";
+	import { type Relay, type RelayRole, type FolderRole, type RemoteSharedFolder, type Role } from "../Relay";
 	import SettingItem from "./SettingItem.svelte";
 	import type Live from "src/main";
 	import { SharedFolders, type SharedFolder } from "src/SharedFolder";
@@ -35,12 +36,9 @@
 
 	export let errorLog = curryLog("ManageRemoveFolder.svelte", "error");
 
-	plugin.relayManager.refreshRemoteFolder(remoteFolder);
+	void plugin.relayManager.refreshRemoteFolder(remoteFolder).catch(() => undefined);
 
-	let relayStore = derived([relayRoles], ([$relayRoles]) => {
-		return $relayRoles.find((role) => role.relayId === $remoteFolder.relayId)
-			?.relay;
-	});
+	let relayStore = derived(remoteFolder, folder => folder.relay);
 
 	let folderStore = derived($sharedFolders, ($sharedFolders) => {
 		return $sharedFolders
@@ -49,11 +47,14 @@
 	});
 
 	const availableRoles = derived(
-		[plugin.relayManager.roles, relayRoles, remoteFolder],
-		([$roles, $relayRoles, $remoteFolder]) => new Map(
-			$relayRoles.values()
-				.filter((role) => role.relayId === $remoteFolder.relayId)
-				.map((role) => [role.userId, offeredFolderRoles($roles.values(), role.role).sort(rolePrioritySort)] as const),
+		[plugin.relayManager.roles, relayRoles, folderRoles, remoteFolder],
+		([$roles, $relayRoles, $folderRoles, $remoteFolder]) => new Map(
+			$folderRoles.values()
+				.filter(role => role.sharedFolderId === $remoteFolder.id)
+				.map(role => {
+					const inherited = $relayRoles.find(r => r.relayId === $remoteFolder.relayId && r.userId === role.userId)?.role;
+					return [role.userId, $roles.values().filter(r => r.name === "Reader" || (r.name === "Member" && inherited !== "Reader")).sort(rolePrioritySort)] as const;
+				}),
 		),
 	);
 
@@ -64,15 +65,14 @@
 
 	// Get folder roles for this specific folder
 	let virtualFolderRoles = derived(
-		[folderRoles, relayRoles],
-		([$folderRoles, $relayRoles]) => {
+		[folderRoles, relayRoles, remoteFolder],
+		([$folderRoles, $relayRoles, $remoteFolder]) => {
 			if ($remoteFolder.private || false) {
 				// Manual filtering instead of .filter() to avoid DerivedMap lifecycle issues
 				const result = [];
 				for (const role of $folderRoles.values()) {
 					if (
-						role.sharedFolderId === $remoteFolder.id &&
-						$relayRoles.some((rr) => rr.userId === role.userId)
+						role.sharedFolderId === $remoteFolder.id
 					) {
 						result.push(role);
 					}
@@ -86,6 +86,9 @@
 					result.push(role);
 				}
 			}
+			for (const role of $folderRoles.values()) {
+				if (role.sharedFolderId === $remoteFolder.id && !result.some(r => r.userId === role.userId)) result.push(role);
+			}
 			return result;
 		},
 	);
@@ -97,6 +100,7 @@
 	let lastSavedName = remoteFolder.name;
 	let deletingLocal = false;
 	let deletingRemote = false;
+	let confirmRemoteDeletion = false;
 
 	// Create a reactive variable for the private flag to ensure breadcrumbs update
 	$: isPrivate = $remoteFolder?.private || false;
@@ -107,37 +111,8 @@
 		}
 	});
 
-	async function handleUpgrade(relay: Relay) {
-		if (!plugin.loginManager?.user) {
-			return;
-		}
-		const payload = {
-			relay: relay.id,
-			quantity: 10,
-			user_email: plugin.loginManager.getAccountEmailForRequest(),
-		};
-		const encodedPayload = btoa(JSON.stringify(payload))
-			.replace(/\+/g, "-")
-			.replace(/\//g, "_")
-			.replace(/=+$/, "");
-		window.open(
-			plugin.buildApiUrl(`/subscribe/${encodedPayload}?action="buy_storage"`),
-			"_blank",
-		);
-	}
-
 	let syncSettings: SyncSettingsManager | undefined =
 		$folderStore?.syncSettingsManager;
-
-	let noStorage = derived(
-		[folderStore, relayRoles],
-		([$folderStore, $relayRoles]) => {
-			return (
-				$relayRoles.find((role) => role.relay === $folderStore?.remote?.relay)
-					?.relay?.storageQuota?.quota === 0
-			);
-		},
-	);
 
 	// Type the entries
 	type CategoryEntry = [
@@ -159,7 +134,6 @@
 		if (isUpdating) return;
 		if (!syncSettings) return;
 		if (name === "markdown") return;
-		if ($noStorage && syncSettings.getCategory(name).requiresStorage) return;
 		isUpdating = true;
 		try {
 			await syncSettings.toggleCategory(name, value);
@@ -232,7 +206,7 @@
 	}
 
 	async function handleDeleteRemote() {
-		if (deletingRemote) return;
+		if (deletingRemote || !confirmRemoteDeletion) return;
 		deletingRemote = true;
 		try {
 			await plugin.relayManager.deleteRemote(remoteFolder);
@@ -244,7 +218,7 @@
 			}
 		} catch (error) {
 			errorLog("Failed to delete remote folder:", error);
-			handleServerError(error, "Failed to delete folder from Relay Server.");
+			handleServerError(error, "Failed to delete folder from relay.");
 			return;
 		} finally {
 			deletingRemote = false;
@@ -438,18 +412,6 @@
 	]}
 />
 
-{#if $canManageUsers && !$canReadFolder}
-	<div
-		style="padding: 1em; margin: 1em; background: var(--background-secondary)"
-	>
-		<p style="margin: 1em; text-align: center">
-			As Relay Server owner, you can manage this Shared Folder but cannot access
-			its contents. You must be added to the Shared Folder in order to
-			collaborate.
-		</p>
-	</div>
-{/if}
-
 {#if $canRenameFolder}
 	<SettingItem
 		name="Name"
@@ -462,8 +424,8 @@
 			bind:value={displayName}
 			bind:this={nameInput}
 			on:input={handleNameChange}
-			class={($updating ? "system3-updating" : "") +
-				($nameValid ? "" : " system3-input-invalid")}
+			class={($updating ? "freelay-updating" : "") +
+				($nameValid ? "" : " freelay-input-invalid")}
 		/>
 	</SettingItem>
 {/if}
@@ -476,7 +438,7 @@
 			description="Download and sync this folder to your local device"
 		>
 			<button
-				class="mod-cta system3-button"
+				class="mod-cta freelay-button"
 				data-action="add-to-vault"
 				on:click={debounce(handleAddToVault)}
 			>
@@ -491,9 +453,9 @@
 		name="Users with access"
 		helpText={isPrivate
 			? ""
-			: "This folder is accessible to everyone on this Relay Server."}
+			: "This folder is accessible to everyone on this relay."}
 	>
-		{#if $remoteFolder.private && $canManageUsers}
+		{#if $canManageUsers}
 			<div
 				class="edit-members-button"
 				role="button"
@@ -514,7 +476,7 @@
 	<SettingGroup>
 		{#each $virtualFolderRoles as role}
 		<AccountSettingItem user={role.user}>
-			{#if isPrivate}
+			{#if "sharedFolder" in role}
 				{#if $isEditingUsers}
 					<button
 						class="mod-destructive"
@@ -562,7 +524,11 @@
 			</button>
 		</SettingItem>
 	{/if}
-	</SettingGroup>
+</SettingGroup>
+{/if}
+
+{#if $canManageUsers}
+	<InvitationPanel {plugin} relayId={remoteFolder.relayId} folderId={remoteFolder.id} />
 {/if}
 
 <div class="spacer"></div>
@@ -571,7 +537,7 @@
 	<div class="local-settings">
 		<SettingItemHeading
 			name="Sync settings for this device"
-			helpText="You must have attachment storage available in order to sync attachments."
+			helpText="Choose which content types to sync on this device."
 		></SettingItemHeading>
 
 		<SettingGroup>
@@ -584,7 +550,7 @@
 			</SettingItem>
 		{/if}
 		{#each settingEntries as [name, category]}
-			{@const locked = $noStorage && category.requiresStorage}
+			{@const locked = false}
 			{@const on = category.enabled && !locked}
 			{@const disabled = isUpdating || !category.canToggle}
 			<SlimSettingItem name={category.name} description={category.description}>
@@ -617,19 +583,6 @@
 				</div>
 			</SlimSettingItem>
 		{/each}
-		{#if $noStorage && $relayStore}
-			<SlimSettingItem name="">
-				<button
-					class="mod-cta"
-					data-action="buy-storage"
-					on:click={debounce(() => {
-						handleUpgrade($relayStore);
-					})}
-				>
-					Buy storage
-				</button>
-			</SlimSettingItem>
-		{/if}
 		</SettingGroup>
 	</div>
 {/if}
@@ -654,16 +607,17 @@
 			{/if}
 			{#if $canDeleteFolder}
 				<SettingItem
-					name="Remove from Relay Server"
-					description={`Deletes the remote folder from the Relay Server. Local files will be preserved.`}
+					name="Remove from relay"
+					description="Irreversible. Stops new access now; server data is collected after the safety delay. Local files are preserved."
 				>
+					<label><input type="checkbox" bind:checked={confirmRemoteDeletion} /> Permanently delete this shared folder from the server</label>
 					<button
 						class="mod-destructive"
-						disabled={deletingRemote}
+						disabled={deletingRemote || !confirmRemoteDeletion}
 						aria-busy={deletingRemote}
 						on:click={handleDeleteRemote}
 					>
-						Delete from Relay Server
+						Delete shared folder
 					</button>
 				</SettingItem>
 			{/if}
@@ -697,11 +651,11 @@
 		padding-left: 1em;
 		border-left: 1px solid var(--color-accent);
 	}
-	.system3-input-invalid {
+	.freelay-input-invalid {
 		border: 1px solid var(--color-red) !important;
 	}
 
-	input.system3-updating {
+	input.freelay-updating {
 		border: 1px solid var(--color-accent) !important;
 	}
 

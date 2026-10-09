@@ -2,7 +2,7 @@ import { Component, ItemView, MarkdownRenderer, type Workspace, type WorkspaceLe
 import { readMessageActions, type ServiceMessageAction } from "../ServiceMessages";
 import { requestUrlWithMetrics } from "../customFetch";
 
-export const SERVICE_MESSAGE_VIEW = "system3-relay-service-message";
+export const SERVICE_MESSAGE_VIEW = "freelay-service-message";
 type MarkdownAction = Extract<ServiceMessageAction, { type: "markdown" }>;
 const MAX_MARKDOWN_BYTES = 512 * 1024;
 
@@ -34,7 +34,7 @@ export class ServiceMessageView extends ItemView {
 	private renderOwner?: Component;
 
 	getViewType(): string { return SERVICE_MESSAGE_VIEW; }
-	getDisplayText(): string { return this.action?.label ?? "Relay message"; }
+	getDisplayText(): string { return this.action?.label ?? "Freelay message"; }
 	getIcon(): string { return "file-text"; }
 	getState(): Record<string, unknown> { return this.action ? { action: this.action } : {}; }
 
@@ -65,7 +65,7 @@ export class ServiceMessageView extends ItemView {
 
 	private async renderNote(): Promise<void> {
 		this.clearRender();
-		this.contentEl.addClass("markdown-preview-view", "system3-service-message-view");
+		this.contentEl.addClass("markdown-preview-view", "freelay-service-message-view");
 		const body = this.contentEl.createDiv({ cls: "markdown-preview-sizer markdown-rendered" });
 		const action = this.action;
 		if (!action) { body.createEl("p", { text: "No message selected." }); return; }

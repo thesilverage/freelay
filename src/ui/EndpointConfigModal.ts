@@ -11,7 +11,7 @@ export class EndpointConfigModal extends Modal {
 		private plugin: Live,
 	) {
 		super(app);
-		this.setTitle("Enterprise tenant configuration");
+		this.setTitle("Freelay server configuration");
 	}
 
 	onOpen() {

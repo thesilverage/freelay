@@ -58,6 +58,8 @@ permissions:
 
 jobs:
   prepare:
+    # Archived upstream private harness; Freelay uses public tests.
+    if: ${{ false }}
     name: prepare
     runs-on: ubuntu-latest
     outputs:
@@ -82,6 +84,8 @@ jobs:
         run: .github/ci/burnin-prepare.sh --ref "$REF" --tests "$TESTS" --harness-ref "$HARNESS_REF"
 
   burnin:
+    # Archived upstream private harness; Freelay uses public tests.
+    if: ${{ false }}
     name: burnin (${{ matrix.plan }})
     needs: prepare
     runs-on: ubuntu-latest
@@ -151,9 +155,10 @@ jobs:
               { title: `E2E burn-in (${plan})`, checkName: `burnin (${plan})` });
 
   aggregate:
+    # Archived upstream private harness; Freelay uses public tests.
+    if: ${{ false }}
     name: aggregate
     needs: [prepare, burnin]
-    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

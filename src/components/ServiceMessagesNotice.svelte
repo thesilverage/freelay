@@ -7,7 +7,7 @@
 
 	export let messages: ServiceMessages;
 	export let onAction: (action: ServiceMessageAction) => void;
-	export let slotClass = "system3-service-messages-slot";
+	export let slotClass = "freelay-service-messages-slot";
 	let message: ServiceMessage | null = null;
 	const unsubscribeMessages = messages.subscribe(next => { message = next; });
 	onDestroy(() => {

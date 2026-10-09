@@ -13,7 +13,6 @@
 	let responseImpl = writable<string>(getResponse());
 	let fetchImpl = writable<string>(getFetch());
 	let usingBlink = writable<string>(getUsingBlink());
-	let anyPb = writable<any>(plugin.loginManager.pb as any);
 	let logFiles = writable<string[]>([]);
 
 	getAllLogFiles().then((files) => {
@@ -48,7 +47,6 @@
 		responseImpl.set(getResponse());
 		fetchImpl.set(getFetch());
 		usingBlink.set(getUsingBlink());
-		anyPb.set(plugin.loginManager.pb as any);
 	}
 </script>
 
@@ -81,19 +79,6 @@
 
 		<SettingItem name="Startup Time" description="">
 			{plugin.loadTime ? `${plugin.loadTime}ms` : "unknown"}
-		</SettingItem>
-	</SettingGroup>
-
-	<SettingItemHeading name="Connections" />
-	<SettingGroup>
-		<SettingItem name="" description="">
-			<div slot="description">
-				{#each Object.keys($anyPb.cancelControllers) as connection}
-					<div>
-						{`${connection}`}
-					</div>
-				{/each}
-			</div>
 		</SettingItem>
 	</SettingGroup>
 

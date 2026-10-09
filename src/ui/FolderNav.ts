@@ -127,11 +127,11 @@ class FolderBar implements Destroyable {
 	}
 
 	add() {
-		(this.el.nextSibling as HTMLElement)?.addClass("system3-live");
+		(this.el.nextSibling as HTMLElement)?.addClass("freelay-live");
 	}
 
 	remove() {
-		(this.el.nextSibling as HTMLElement)?.removeClass("system3-live");
+		(this.el.nextSibling as HTMLElement)?.removeClass("freelay-live");
 	}
 
 	destroy() {
@@ -189,7 +189,7 @@ class PillDecoration {
 		this.sharedFolder = sharedFolder;
 
 		// clean up failed destroys
-		const stalePills = el.querySelectorAll(".system3-folder-icons");
+		const stalePills = el.querySelectorAll(".freelay-folder-icons");
 		if (stalePills.length > 0) {
 			stalePills?.forEach((pill) => {
 				pill.remove();
@@ -197,7 +197,7 @@ class PillDecoration {
 		}
 
 		this.el = el;
-		this.el.addClass("system3-pill");
+		this.el.addClass("freelay-pill");
 		this.el.setAttribute("data-relay-state", this.sharedFolder.state.status);
 
 		this.pill = mountComponent(Pill, {
@@ -246,7 +246,7 @@ class PillDecoration {
 	destroy() {
 		this.pill.destroy();
 		this.unsubscribe();
-		this.el.removeClass("system3-pill");
+		this.el.removeClass("freelay-pill");
 		this.el.removeAttribute("data-relay-state");
 	}
 }
@@ -302,23 +302,23 @@ class QueueWatcher implements Destroyable {
 		);
 
 		if (isSyncing) {
-			this.titleEl.addClass("system3-syncing");
+			this.titleEl.addClass("freelay-syncing");
 		} else {
-			this.titleEl.removeClass("system3-syncing");
+			this.titleEl.removeClass("freelay-syncing");
 		}
 
 		if (isDownloading) {
-			this.titleEl.addClass("system3-downloading");
+			this.titleEl.addClass("freelay-downloading");
 		} else {
-			this.titleEl.removeClass("system3-downloading");
+			this.titleEl.removeClass("freelay-downloading");
 		}
 	}
 
 	destroy(): void {
 		if (this.destroyed) return;
 		this.destroyed = true;
-		this.titleEl.removeClass("system3-syncing");
-		this.titleEl.removeClass("system3-downloading");
+		this.titleEl.removeClass("freelay-syncing");
+		this.titleEl.removeClass("freelay-downloading");
 		this.onDestroyed(this);
 	}
 }
@@ -396,7 +396,7 @@ class FilePillDecoration {
 		private el: HTMLElement,
 		public file: SyncFile,
 	) {
-		this.el.querySelectorAll(".system3-uploadpill").forEach((el) => {
+		this.el.querySelectorAll(".freelay-uploadpill").forEach((el) => {
 			el.remove();
 		});
 
@@ -441,7 +441,7 @@ class FilePillDecoration {
 
 	destroy() {
 		this.unsubscribes.forEach((off) => off());
-		this.el.querySelectorAll(".system3-uploadpill").forEach((el) => {
+		this.el.querySelectorAll(".freelay-uploadpill").forEach((el) => {
 			el.remove();
 		});
 		this.pill?.destroy();
@@ -493,7 +493,7 @@ class NotSyncedPillDecoration {
 		label: string,
 		reason: string,
 	) {
-		this.el.querySelectorAll(".system3-filepill").forEach((el) => {
+		this.el.querySelectorAll(".freelay-filepill").forEach((el) => {
 			el.remove();
 		});
 		// TODO: Ensure the not-synced pill comes last
@@ -513,7 +513,7 @@ class NotSyncedPillDecoration {
 
 	destroy() {
 		this.pill.destroy();
-		this.el.querySelectorAll(".system3-filepill").forEach((el) => {
+		this.el.querySelectorAll(".freelay-filepill").forEach((el) => {
 			el.remove();
 		});
 	}
@@ -555,7 +555,7 @@ class CaseConflictPillDecoration implements Destroyable {
 		label: string,
 		onClick?: () => void,
 	) {
-		this.el.querySelectorAll(".system3-case-conflict").forEach((el) => {
+		this.el.querySelectorAll(".freelay-case-conflict").forEach((el) => {
 			el.remove();
 		});
 		this.pill = mountComponent(TextPill, {
@@ -576,7 +576,7 @@ class CaseConflictPillDecoration implements Destroyable {
 
 	destroy() {
 		this.pill.destroy();
-		this.el.querySelectorAll(".system3-case-conflict").forEach((el) => {
+		this.el.querySelectorAll(".freelay-case-conflict").forEach((el) => {
 			el.remove();
 		});
 	}
@@ -649,21 +649,21 @@ class DocumentStatus implements Destroyable {
 
 	docStatus(status?: ConnectionState) {
 		if (status?.status === "connected") {
-			this.el.removeClass("system3-connecting");
-			this.el.addClass("system3-connected");
-			this.el.addClass("system3-live");
+			this.el.removeClass("freelay-connecting");
+			this.el.addClass("freelay-connected");
+			this.el.addClass("freelay-live");
 		} else if (status?.status === "connecting") {
-			this.el.removeClass("system3-connected");
-			this.el.addClass("system3-connecting");
-			this.el.addClass("system3-live");
+			this.el.removeClass("freelay-connected");
+			this.el.addClass("freelay-connecting");
+			this.el.addClass("freelay-live");
 		} else if (status?.status === "disconnected") {
-			this.el.addClass("system3-live");
-			this.el.removeClass("system3-connected");
-			this.el.removeClass("system3-connecting");
+			this.el.addClass("freelay-live");
+			this.el.removeClass("freelay-connected");
+			this.el.removeClass("freelay-connecting");
 		} else {
-			this.el.removeClass("system3-connected");
-			this.el.removeClass("system3-connecting");
-			this.el.removeClass("system3-live");
+			this.el.removeClass("freelay-connected");
+			this.el.removeClass("freelay-connecting");
+			this.el.removeClass("freelay-live");
 		}
 	}
 
@@ -727,10 +727,10 @@ class FileConflictDecoration implements Destroyable {
 		if (this.destroyed) return;
 		const conflict = fileHasConflict(this.sharedFolder, this.guid);
 		if (conflict && !this.applied) {
-			this.el.classList.add("system3-conflict");
+			this.el.classList.add("freelay-conflict");
 			this.applied = true;
 		} else if (!conflict && this.applied) {
-			this.el.classList.remove("system3-conflict");
+			this.el.classList.remove("freelay-conflict");
 			this.applied = false;
 		}
 	}
@@ -739,7 +739,7 @@ class FileConflictDecoration implements Destroyable {
 		if (this.destroyed) return;
 		this.destroyed = true;
 		if (this.applied) {
-			this.el.classList.remove("system3-conflict");
+			this.el.classList.remove("freelay-conflict");
 			this.applied = false;
 		}
 		this.onDestroyed(this);

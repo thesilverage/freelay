@@ -211,7 +211,7 @@ export class NoteStateSection {
 	private destroyed = false;
 
 	constructor(private context: NoteStateSectionContext) {
-		this.el = createDiv({ cls: "system3-note-state" });
+		this.el = createDiv({ cls: "freelay-note-state" });
 		this.publishedView = {
 			title: "Note state",
 			verdict: { label: "unknown", cls: "muted" },

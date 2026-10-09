@@ -1,5 +1,6 @@
 "use strict";
 import { AttachmentTransfers } from "./AttachmentTransfers";
+import { profileStorageKey } from "./control/Identity";
 
 import type { MergeEvent } from "./merge-hsm/types";
 import {
@@ -136,6 +137,7 @@ const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
 
 interface RelaySettings extends FeatureFlags, DebugSettings {
 	sharedFolders: SharedFolderSettings[];
+	servers?: Record<string, {sharedFolders: SharedFolderSettings[]}>;
 	release: ReleaseSettings;
 	endpoints: EndpointSettings;
 	plugins?: PluginRegistrationSettings;
@@ -156,7 +158,6 @@ type VaultDeleteEvent = {
 	isFolder: boolean;
 };
 
-declare const HEALTH_URL: string;
 declare const GIT_TAG: string;
 declare const REPOSITORY: string;
 
@@ -194,6 +195,7 @@ export default class Live extends Plugin {
 	private featureSettings!: NamespacedSettings<FeatureFlags>;
 	private debugSettings!: NamespacedSettings<DebugSettings>;
 	private folderSettings!: NamespacedSettings<SharedFolderSettings[]>;
+	private folderSettingsPath!: string;
 	public releaseSettings!: NamespacedSettings<ReleaseSettings>;
 	public loginSettings!: NamespacedSettings<LoginSettings>;
 	public endpointSettings!: NamespacedSettings<EndpointSettings>;
@@ -542,7 +544,7 @@ export default class Live extends Plugin {
 		const leaked: string[] = Array.from(w.__relayInstances ?? []);
 		if (leaked.length > 0) {
 			console.error(
-				`[Relay] leaked plugin instance(s) from a previous lifecycle: ${leaked.join(", ")}. ` +
+				`[Freelay] leaked plugin instance(s) from a previous lifecycle: ${leaked.join(", ")}. ` +
 				`Previous onunload() did not complete — expect stale listeners, ` +
 				`duplicate WebSocket subscribers, and ghost state. ` +
 				`Reload Obsidian to recover.`,
@@ -603,10 +605,10 @@ export default class Live extends Plugin {
 		}
 		this.notifier = new ObsidianNotifier();
 
-		this.debug = curryLog("[System 3][Relay]", "debug");
-		this.log = curryLog("[System 3][Relay]", "log");
-		this.warn = curryLog("[System 3][Relay]", "warn");
-		this.error = curryLog("[System 3][Relay]", "error");
+		this.debug = curryLog("[Freelay]", "debug");
+		this.log = curryLog("[Freelay]", "log");
+		this.warn = curryLog("[Freelay]", "warn");
+		this.error = curryLog("[Freelay]", "error");
 
 		this.log("Plugin started", { version: this.manifest.version });
 
@@ -621,10 +623,18 @@ export default class Live extends Plugin {
 		const settingsTree = this.settings as unknown as SettingsTree;
 		this.featureSettings = new NamespacedSettings(settingsTree, "(enable*)");
 		this.debugSettings = new NamespacedSettings(settingsTree, "(debugging)");
-		this.folderSettings = new NamespacedSettings(settingsTree, "sharedFolders");
 		this.releaseSettings = new NamespacedSettings(settingsTree, "release");
 		this.loginSettings = new NamespacedSettings(settingsTree, "login");
 		this.endpointSettings = new NamespacedSettings(settingsTree, "endpoints");
+		const endpointManager = new EndpointManager(this.endpointSettings);
+		await this.validateEndpointsOnStartup(endpointManager);
+		const profileKey = await profileStorageKey(endpointManager.getApiUrl());
+		await this.settings.update(s => ({...s, servers: {...s.servers, [profileKey]: s.servers?.[profileKey] || {sharedFolders: []}}}));
+		this.folderSettingsPath = `servers/${profileKey}/sharedFolders`;
+		this.folderSettings = new NamespacedSettings(settingsTree, this.folderSettingsPath);
+		// Isolate every app-ID-keyed persistence store, including CRDT and transfer
+		// recovery state, from Relay and from other Freelay server profiles.
+		this.appId = `${this.appId}-freelay-${profileKey}`;
 		this.pluginRegistrySettings = new NamespacedSettings(
 			settingsTree,
 			"plugins",
@@ -682,7 +692,7 @@ export default class Live extends Plugin {
 		}
 
 		this.settingsTab = new LiveSettingsTab(this.app, this);
-		this.addRibbonIcon("satellite", "Relay", () => {
+		this.addRibbonIcon("satellite", "Freelay", () => {
 			void this.openSettings();
 		});
 
@@ -847,10 +857,6 @@ export default class Live extends Plugin {
 
 		this.hashStore = new ContentAddressedFileStore(this.appId);
 
-		// Initialize and validate endpoints before creating LoginManager
-		const endpointManager = new EndpointManager(this.endpointSettings);
-		await this.validateEndpointsOnStartup(endpointManager);
-
 		this.loginManager = new LoginManager(
 			this.vault.getName(),
 			this.openSettings.bind(this),
@@ -858,6 +864,7 @@ export default class Live extends Plugin {
 			this.patchWebviewer.bind(this),
 			this.loginSettings,
 			endpointManager,
+			this.app.secretStorage,
 		);
 		this.relayManager = new RelayManager(this.loginManager);
 		this.relayDebugAPI = new RelayDebugAPI(this);
@@ -931,7 +938,7 @@ export default class Live extends Plugin {
 			tokenRefreshJitterSeed,
 		);
 
-		this.networkStatus = new NetworkStatus(this.timeProvider, HEALTH_URL);
+		this.networkStatus = new NetworkStatus(this.timeProvider, endpointManager.getApiUrl() ? endpointManager.getApiUrl() + "/ready" : "");
 
 		this.registerView(SERVICE_MESSAGE_VIEW, leaf => new ServiceMessageView(leaf));
 		const serviceMessages = new ServiceMessages(this.appId, this.manifest.id, this.timeProvider);
@@ -939,7 +946,7 @@ export default class Live extends Plugin {
 		this.register(this.networkStatus.subscribeServiceMessageSelection(selection => serviceMessages.updateSelection(selection)));
 		this.serviceMessagesSidebarNotice = new SidebarNoticeMount(
 			this.app.workspace,
-			"system3-service-messages-slot",
+			"freelay-service-messages-slot",
 			(target, anchor) => mountComponent(ServiceMessagesNotice, {
 				target, anchor, props: { messages: serviceMessages, onAction: (action: ServiceMessageAction) => { void this.openServiceMessageAction(action); } },
 			}),
@@ -1044,7 +1051,7 @@ export default class Live extends Plugin {
 						if (folder.relayId) {
 							menu.addItem((item) => {
 								item
-									.setTitle("Relay: Relay settings")
+									.setTitle("Freelay: Freelay settings")
 									.setIcon("gear")
 									.onClick(() => {
 										void this.openSettings(`/relays?id=${folder.relayId}`);
@@ -1052,7 +1059,7 @@ export default class Live extends Plugin {
 							});
 							menu.addItem((item) => {
 								item
-									.setTitle("Relay: Local folder settings")
+									.setTitle("Freelay: Local folder settings")
 									.setIcon("gear")
 									.onClick(() => {
 										void this.openSettings(`/shared-folders?id=${folder.guid}`);
@@ -1061,7 +1068,7 @@ export default class Live extends Plugin {
 							menu.addItem((item) => {
 								item
 									.setTitle(
-										folder.connected ? "Relay: Disconnect" : "Relay: Connect",
+										folder.connected ? "Freelay: Disconnect" : "Freelay: Connect",
 									)
 									.setIcon("satellite")
 									.onClick(() => {
@@ -1078,7 +1085,7 @@ export default class Live extends Plugin {
 						} else {
 							menu.addItem((item) => {
 								item
-									.setTitle("Relay: Local folder settings")
+									.setTitle("Freelay: Local folder settings")
 									.setIcon("gear")
 									.onClick(() => {
 										void this.openSettings(`/shared-folders?id=${folder.guid}`);
@@ -1088,7 +1095,7 @@ export default class Live extends Plugin {
 						if (folder.relayId && folder.connected && !folder.localOnly) {
 							menu.addItem((item) => {
 								item
-									.setTitle("Relay: Sync")
+									.setTitle("Freelay: Sync")
 									.setIcon("folder-sync")
 									.onClick(() => {
 										void openSyncStatusView(
@@ -1100,7 +1107,7 @@ export default class Live extends Plugin {
 											if (isDestroyedError(error)) {
 												return;
 											}
-											this.warn("Relay: Resync failed", error);
+											this.warn("Freelay: Resync failed", error);
 										});
 									});
 							});
@@ -1111,7 +1118,7 @@ export default class Live extends Plugin {
 						if (ifile && isSyncFile(ifile)) {
 							menu.addItem((item) => {
 								item
-									.setTitle("Relay: Download")
+									.setTitle("Freelay: Download")
 									.setIcon("cloud-download")
 									.onClick(async () => {
 										try {
@@ -1126,7 +1133,7 @@ export default class Live extends Plugin {
 							if (this.debugSettings.get().debugging) {
 								menu.addItem((item) => {
 									item
-										.setTitle("Relay: Verify upload")
+										.setTitle("Freelay: Verify upload")
 										.setIcon("search-check")
 										.onClick(async () => {
 											const present = await ifile.verifyUpload();
@@ -1138,7 +1145,7 @@ export default class Live extends Plugin {
 							}
 							menu.addItem((item) => {
 								item
-									.setTitle("Relay: Upload")
+									.setTitle("Freelay: Upload")
 									.setIcon("cloud-upload")
 									.onClick(async () => {
 										await ifile.push(true);
@@ -1209,7 +1216,7 @@ export default class Live extends Plugin {
 		// Initialize settings with pattern matching syntax
 		const folderSettings = new NamespacedSettings<SharedFolderSettings>(
 			this.settings as unknown as SettingsTree,
-			`sharedFolders/[guid=${guid}]`,
+			`${this.folderSettingsPath}/[guid=${guid}]`,
 		);
 		const settings: SharedFolderSettings = { guid: guid, path: path };
 		if (relayId) {
@@ -1279,7 +1286,7 @@ export default class Live extends Plugin {
 			this.app as typeof this.app & { setting: SettingsController }
 		).setting;
 		await setting.open();
-		await setting.openTabById("system3-relay");
+		await setting.openTabById(this.manifest.id);
 		this.settingsTab.navigateTo(path);
 	}
 
@@ -1449,7 +1456,7 @@ export default class Live extends Plugin {
 			}),
 		);
 
-		const vaultLog = curryLog("[System 3][Relay][Vault]", "log");
+		const vaultLog = curryLog("[Freelay][Vault]", "log");
 
 		const handlePromiseRejection = (event: PromiseRejectionEvent): void => {
 			//event.preventDefault();
@@ -1947,7 +1954,7 @@ export default class Live extends Plugin {
 				};
 			};
 			const appCommands = appAny.commands;
-			const qualifiedCommand = `system3-relay:${command}`;
+			const qualifiedCommand = `${this.manifest.id}:${command}`;
 			if (
 				Object.prototype.hasOwnProperty.call(
 					appCommands.commands,
@@ -1970,7 +1977,7 @@ export default class Live extends Plugin {
 			} catch (error) {
 				const e = error as { message?: string; stack?: string };
 				console.error(
-					`[Relay] onunload failed at step: ${name}: ${e?.message ?? String(error)}\n${e?.stack ?? ""}`,
+					`[Freelay] onunload failed at step: ${name}: ${e?.message ?? String(error)}\n${e?.stack ?? ""}`,
 				);
 				// Do NOT rethrow. A single step's failure must not abort the
 				// rest of onunload; every later step represents a distinct

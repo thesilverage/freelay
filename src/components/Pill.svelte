@@ -14,39 +14,39 @@
 
 	$: effectiveLocalOnly = enableDraftMode && localOnly;
 	$: satelliteClass = effectiveLocalOnly
-		? "system3-paused"
-		: `system3-${status}`;
+		? "freelay-paused"
+		: `freelay-${status}`;
 	$: satelliteLabel = effectiveLocalOnly
-			? `${remote?.relay.name || "Relay Server"} (paused)`
-			: `${remote?.relay.name || "Relay Server"} (${status})`;
+			? `${remote?.relay.name || "relay"} (paused)`
+			: `${remote?.relay.name || "relay"} (${status})`;
 </script>
 
-<div class="system3-folder-icons">
+<div class="freelay-folder-icons">
 	<!-- Always show progress while running, regardless of completion -->
 	{#if showProgress}
-		<span class="system3-progress-text system3-{syncStatus}" style="opacity: 1">
+		<span class="freelay-progress-text freelay-{syncStatus}" style="opacity: 1">
 			{progress}%
 		</span>
 	{/if}
 	{#if relayId}
-		<span class="notebook system3-icon hidden" aria-label="Tracking Changes">
+		<span class="notebook freelay-icon hidden" aria-label="Tracking Changes">
 			<Layers class="inline-icon" style="width: 0.8em" />
 		</span>
 		<span
-			class="satellite system3-icon {satelliteClass}"
+			class="satellite freelay-icon {satelliteClass}"
 			aria-label={satelliteLabel}
 		>
 			<Satellite class="inline-icon" />
 		</span>
 	{:else}
-		<span class="notebook system3-icon" aria-label="Tracking Changes">
+		<span class="notebook freelay-icon" aria-label="Tracking Changes">
 			<Layers class="inline-icon" style="width: 0.8em" />
 		</span>
 	{/if}
 </div>
 
 <style>
-	.system3-folder-icons {
+	.freelay-folder-icons {
 		display: inline-flex;
 		align-items: center;
 		vertical-align: middle;
@@ -59,7 +59,7 @@
 		position: relative;
 	}
 
-	.system3-icon {
+	.freelay-icon {
 		margin-right: 0.2em;
 		margin-left: 0.2em;
 		width: 1em;
@@ -67,13 +67,13 @@
 		transition: display 0.3s ease;
 	}
 
-	span.system3-connected {
+	span.freelay-connected {
 		color: var(--color-accent);
 	}
-	span.system3-disconnected {
+	span.freelay-disconnected {
 		color: var(--color-base-40);
 	}
-	span.system3-paused {
+	span.freelay-paused {
 		color: var(--color-yellow);
 	}
 	/* Held deletions read as pending outbound ops: a red count with an
@@ -82,7 +82,7 @@
 	   stays truthful. The arrow is an SVG sized to the count's font so the
 	   pair centers on one text line inside the pill's short row instead of
 	   a text arrow glyph riding above the number's line box. */
-	.system3-held-count {
+	.freelay-held-count {
 		color: var(--color-red);
 		font-size: 0.75em;
 		margin-right: 0.35em;
@@ -94,10 +94,10 @@
 	/* Digits have no descenders, so their ink paints high of the flex
 	   center by ~1px at this size; the arrow SVG centers exactly. Nudge
 	   only the digits. */
-	.system3-held-digits {
+	.freelay-held-digits {
 		transform: translateY(1px);
 	}
-	.system3-gated-clickable {
+	.freelay-gated-clickable {
 		cursor: pointer;
 	}
 	span.notebook {
@@ -108,7 +108,7 @@
 		display: none;
 	}
 
-	.system3-progress-text {
+	.freelay-progress-text {
 		margin-right: 0.4em;
 		font-size: 0.8em;
 		color: var(--color-accent);
@@ -116,11 +116,11 @@
 		transition: opacity 0.3s ease;
 	}
 
-	.system3-progress-text.completed {
+	.freelay-progress-text.completed {
 		animation: fadeOutDelay 0.3s ease forwards;
 	}
 
-	.system3-progress-text.failed {
+	.freelay-progress-text.failed {
 		color: var(--color-red);
 	}
 

@@ -425,7 +425,7 @@ export class SharedFolder extends HasProvider {
 		this.files = new Map();
 		this.fset = new Files();
 		this.pendingUpload = new LocalStorage<string>(
-			`${appId}-system3-relay/folders/${this.guid}/pendingUploads`,
+			`${appId}-freelay/folders/${this.guid}/pendingUploads`,
 		);
 		this.pendingUpload.forEach((guid, vpath) => {
 			if (!this.existsSync(vpath)) {
@@ -5480,8 +5480,18 @@ export class SharedFolder extends HasProvider {
 			// if this was moved from outside the shared folder context, we need to create a live doc
 			this.assertPath(newPath);
 			if (!this.isSyncableTFile(tfile)) return;
-			this.placeHold([tfile]);
-			this.uploadFile(tfile);
+			// A vault folder rename may be the only event for the whole tree.
+			// Crossing a shared-folder boundary is a copy with new identities,
+			// not a relabeling of the source's immutable resource bindings.
+			const incoming: TAbstractFile[] = [];
+			const visit = (entry: TAbstractFile) => {
+				if (!this.isSyncableTFile(entry)) return;
+				incoming.push(entry);
+				if (entry instanceof TFolder) entry.children.forEach(visit);
+			};
+			visit(tfile);
+			this.placeHold(incoming);
+			incoming.forEach((entry) => this.uploadFile(entry));
 		} else {
 			const move = this.serverOps.moveFrom(oldVPath);
 			if (move && !this.syncStore.has(oldVPath)) {
@@ -5497,19 +5507,29 @@ export class SharedFolder extends HasProvider {
 			}
 			// live doc exists
 			const guid = this.syncStore.get(oldVPath);
-			if (!guid) return;
-			const file = this.files.get(guid);
+			if (!guid && newVPath) return;
+			const file = guid ? this.files.get(guid) : undefined;
 			if (!newVPath) {
-				// moving out of shared folder.. destroy the live doc.
-				this.folderDoc.transact(() => {
-					this.syncStore.delete(oldVPath);
-				}, this);
-				if (file) {
-					void file.cleanup();
-					file.destroy();
-					this.fset.delete(file);
+				// Retire every source membership, including implied folders and
+				// pending uploads. Keep server history for offline CRDT clients.
+				const paths = new Set(this.expandDeletePaths([oldVPath], tfile instanceof TFolder ? [oldVPath] : []));
+				for (const pending of this.pendingUpload.keys()) {
+					if (pending === oldVPath || (tfile instanceof TFolder && pending.startsWith(oldVPath + sep))) paths.add(pending);
 				}
-				this.files.delete(guid);
+				this.folderDoc.transact(() => {
+					for (const path of paths) {
+						const id = this.syncStore.get(path);
+						this.pendingUpload.delete(path);
+						this.syncStore.delete(path);
+						const loaded = id ? this.files.get(id) : undefined;
+						if (loaded) {
+							void loaded.cleanup();
+							loaded.destroy();
+							this.fset.delete(loaded);
+						}
+						if (id) this.files.delete(id);
+					}
+				}, this);
 			} else {
 				// moving within shared folder.. move the live doc.
 				const guid = this.syncStore.get(oldVPath);

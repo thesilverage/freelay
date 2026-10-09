@@ -22,7 +22,7 @@ export async function downloadAttachment(
 			}
 			// requestUrl cannot abort: retain the transfer slot until it settles.
 			checkAttachmentAbort(signal);
-			if (attempt < 2 && response.status === 403 && typeof source !== "string") { url = await source(); continue; }
+			if (attempt < 2 && (response.status === 401 || response.status === 403) && typeof source !== "string") { url = await source(); continue; }
 			if (attempt < 2 && (response.status === 429 || response.status >= 500)) continue;
 			if (response.status >= 400 && response.status !== 416) throw s3ApiErrorFromResponse(response.status, response.text ?? "", "download attachment");
 			return response;

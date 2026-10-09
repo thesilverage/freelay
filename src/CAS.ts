@@ -8,7 +8,6 @@ import { S3RN } from "./S3RN";
 import type { SharedFolder } from "./SharedFolder";
 import type { SyncFile } from "./SyncFile";
 import { customFetch } from "./customFetch";
-import PocketBase from "pocketbase";
 import { HasLogging } from "./debug";
 import {
 	s3ApiErrorFromResponse,
@@ -27,7 +26,6 @@ export interface ContentAddressedStoreOptions {
 }
 
 export class ContentAddressedStore extends HasLogging {
-	private pb: PocketBase;
 	private tokenStore: LiveTokenStore;
 	private transferRetryDelaysMs: readonly number[];
 
@@ -36,8 +34,6 @@ export class ContentAddressedStore extends HasLogging {
 		options?: ContentAddressedStoreOptions,
 	) {
 		super();
-		const authUrl = sharedFolder.loginManager.getEndpointManager().getAuthUrl();
-		this.pb = new PocketBase(authUrl, sharedFolder.loginManager.authStore);
 		this.tokenStore = sharedFolder.tokenStore;
 		this.transferRetryDelaysMs =
 			options?.transferRetryDelaysMs ?? TRANSFER_RETRY_DELAYS_MS;
@@ -48,21 +44,7 @@ export class ContentAddressedStore extends HasLogging {
 			throw new Error("cannot head file with missing hash");
 		}
 		const sha256 = syncFile.meta.hash;
-		const token = await this.tokenStore.getFileToken(
-			S3RN.encode(syncFile.s3rn),
-			sha256,
-			syncFile.mimetype,
-			0,
-		);
-		const response = await this.s3Request(
-			() =>
-				customFetch(token.baseUrl!, {
-					method: "HEAD",
-					headers: { Authorization: `Bearer ${token.token}` },
-					relayNetworkDomain: "relay",
-				}),
-			"verify attachment",
-		);
+		const response = await this.fileRequest(syncFile, sha256, 0, "", "HEAD");
 		return response.status === 200;
 	}
 
@@ -71,21 +53,9 @@ export class ContentAddressedStore extends HasLogging {
 			throw new Error("cannot pull file with missing hash");
 		}
 		const sha256 = syncFile.meta.hash;
-		const mimetype = syncFile.mimetype;
-		const documentId = S3RN.encode(syncFile.s3rn);
 		const meta = syncFile.meta;
 		return this.withTransientRetry("download attachment", async () => {
-			const token = await this.tokenStore.getFileToken(
-				documentId,
-				sha256,
-				mimetype,
-				0,
-			);
-			const response = await customFetch(token.baseUrl + "/download-url", {
-				method: "GET",
-				headers: { Authorization: `Bearer ${token.token}` },
-				relayNetworkDomain: "relay",
-			});
+			const response = await this.fileRequest(syncFile, sha256, 0, "/download-url", "GET");
 			if (!response.ok) {
 				this.debug(
 					`[${this.sharedFolder.path}] File download-url failed: ${response.status} for ${syncFile.guid} ${meta.hash} ${meta.type}`,
@@ -143,8 +113,7 @@ export class ContentAddressedStore extends HasLogging {
 	}
 
 	private async downloadUrl(syncFile: SyncFile, hash: string): Promise<string> {
-		const token = await this.tokenStore.getFileToken(S3RN.encode(syncFile.s3rn), hash, syncFile.mimetype, 0);
-		const response = await customFetch(token.baseUrl + "/download-url", { headers: { Authorization: `Bearer ${token.token}` }, relayNetworkDomain: "relay" });
+		const response = await this.fileRequest(syncFile, hash, 0, "/download-url", "GET");
 		if (!response.ok) throw await this.s3ResponseError(response, "download attachment url");
 		return (await response.json() as { downloadUrl: string }).downloadUrl;
 	}
@@ -174,8 +143,7 @@ export class ContentAddressedStore extends HasLogging {
 				});
 				await this.withTransientRetry("upload attachment", async () => {
 					checkAttachmentAbort(signal);
-					const token = await this.tokenStore.getFileToken(S3RN.encode(syncFile.s3rn), version.hash, syncFile.mimetype, version.size);
-					const response = await customFetch(token.baseUrl + "/upload-url", { method: "POST", headers: { Authorization: `Bearer ${token.token}` }, relayNetworkDomain: "relay" });
+					const response = await this.fileRequest(syncFile, version.hash, version.size, "/upload-url", "POST");
 					if (!response.ok) throw await this.s3ResponseError(response, "upload attachment url");
 					const { uploadUrl } = await response.json() as { uploadUrl: string };
 					row.phase = "uploading"; row.bytes = 0; manager.notifyListeners();
@@ -210,17 +178,7 @@ export class ContentAddressedStore extends HasLogging {
 		if (!(content && hash)) {
 			throw new Error("invalid caf");
 		}
-		const token = await this.tokenStore.getFileToken(
-			S3RN.encode(syncFile.s3rn),
-			hash,
-			syncFile.mimetype,
-			content.byteLength,
-		);
-		const response = await customFetch(token.baseUrl + "/upload-url", {
-			method: "POST",
-			headers: { Authorization: `Bearer ${token.token}` },
-			relayNetworkDomain: "relay",
-		});
+		const response = await this.fileRequest(syncFile, hash, content.byteLength, "/upload-url", "POST");
 		if (response.status !== 200) {
 			throw await this.s3ResponseError(response, "upload attachment url");
 		}
@@ -241,6 +199,16 @@ export class ContentAddressedStore extends HasLogging {
 		}
 		if (signal) checkAttachmentAbort(signal);
 		return { hash, size: content.byteLength, mtime };
+	}
+
+	/** A process restart invalidates an otherwise unexpired scoped capability. */
+	private async fileRequest(syncFile: SyncFile, hash: string, length: number, suffix: string, method: string): Promise<Response> {
+		for (let attempt = 0; ; attempt++) {
+			const token = await this.tokenStore.getFileToken(S3RN.encode(syncFile.s3rn), hash, syncFile.mimetype, length, attempt > 0);
+			const response = await customFetch(token.baseUrl + suffix, {method, headers: {Authorization: `Bearer ${token.token}`}, relayNetworkDomain: "relay"});
+			// Do not retry policy denials or send this bearer to a presigned URL.
+			if (response.status !== 401 || attempt > 0) return response;
+		}
 	}
 
 	private async s3Request<T>(
@@ -272,8 +240,6 @@ export class ContentAddressedStore extends HasLogging {
 	}
 
 	public destroy() {
-		this.pb.cancelAllRequests();
-		this.pb = null as unknown as typeof this.pb;
 		this.tokenStore = null as unknown as typeof this.tokenStore;
 		this.sharedFolder = null as unknown as typeof this.sharedFolder;
 	}

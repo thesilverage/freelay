@@ -4,7 +4,7 @@
 	import ObsidianFailureNotice from "./ObsidianFailureNotice.svelte";
 
 	export let metadataHealth: MetadataHealth;
-	export let slotClass = "system3-metadata-health-slot";
+	export let slotClass = "freelay-metadata-health-slot";
 	let state: MetadataHealthState = metadataHealth.state;
 	const unsubscribe = metadataHealth.subscribe(health => { state = health.state; });
 	onDestroy(unsubscribe);
@@ -17,6 +17,6 @@
 	className="metadata-health-notice"
 	{slotClass}
 >
-	Relay detected that Obsidian's metadata database is locked. Restart Obsidian
+	Freelay detected that Obsidian's metadata database is locked. Restart Obsidian
 	to restore indexing.
 </ObsidianFailureNotice>

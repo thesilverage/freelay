@@ -77,11 +77,11 @@ export class ResourceMeterMount {
 		// have been left behind by a previous mount (e.g. plugin reload or
 		// sidebar re-render) before inserting a new one.
 		target.ownerDocument
-			.querySelectorAll(".system3-resource-meter")
+			.querySelectorAll(".freelay-resource-meter")
 			.forEach((el) => el.remove());
 
 		this.containerEl = target.createSpan({
-			cls: ["clickable-icon", "system3-resource-meter"],
+			cls: ["clickable-icon", "freelay-resource-meter"],
 		});
 		target.insertBefore(this.containerEl, target.firstChild);
 

@@ -12,7 +12,7 @@
 	export let onDismiss: () => void;
 </script>
 
-<div class="system3-sidebar-notice-slot {slotClass}">
+<div class="freelay-sidebar-notice-slot {slotClass}">
 	<div class="{className} sidebar-notice" class:callout={warning} data-callout={warning ? "warning" : undefined} role="status" style:background-color={backgroundColor} style:color={color}>
 		<div class="sidebar-notice-title-row" class:callout-title={warning}>
 			<div class="sidebar-notice-icon" class:callout-icon={warning} style:color={color}>
@@ -35,7 +35,7 @@
 </div>
 
 <style>
-	:global(.workspace-split) > .system3-sidebar-notice-slot {
+	:global(.workspace-split) > .freelay-sidebar-notice-slot {
 		order: 1;
 		flex: 0 0 auto;
 		height: auto;

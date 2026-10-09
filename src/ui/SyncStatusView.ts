@@ -18,7 +18,7 @@ import type { TimeProvider } from "../TimeProvider";
 import { NoteStateSection } from "./NoteStateSection";
 import { getSyncStatusActivityStore } from "./SyncStatusActivity";
 
-export const VIEW_TYPE_SYNC_STATUS = "system3-sync-status";
+export const VIEW_TYPE_SYNC_STATUS = "freelay-sync-status";
 
 interface SyncStatusViewBinding {
 	sharedFolder: SharedFolder;
@@ -86,7 +86,7 @@ export class SyncStatusView extends ItemView {
 
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
-		container.addClass("system3-sync-status-panel");
+		container.addClass("freelay-sync-status-panel");
 
 		const flagManager = FeatureFlagManager.getInstance();
 		this.register(
@@ -163,7 +163,7 @@ export class SyncStatusView extends ItemView {
 		if (!this.noteState) return;
 		const container = this.containerEl.children[1] as HTMLElement;
 		const slot = container?.querySelector<HTMLElement>(
-			".system3-note-state-slot",
+			".freelay-note-state-slot",
 		);
 		if (slot) this.noteState.attach(slot);
 	}
@@ -235,10 +235,10 @@ export class SyncStatusView extends ItemView {
 		container.empty();
 
 		if (!this.binding) {
-			container.createDiv({ cls: "system3-note-state-slot" });
+			container.createDiv({ cls: "freelay-note-state-slot" });
 			this.attachNoteState();
 			container.createDiv({
-				cls: "system3-sync-status-empty",
+				cls: "freelay-sync-status-empty",
 				text: "No folder selected.",
 			});
 			return;
@@ -246,7 +246,7 @@ export class SyncStatusView extends ItemView {
 
 		this.renderFolderHeader(container, this.binding);
 		const contentEl = container.createDiv({
-			cls: "system3-sync-status-content",
+			cls: "freelay-sync-status-content",
 		});
 
 		const boundFolder = this.binding.sharedFolder;
@@ -275,7 +275,7 @@ export class SyncStatusView extends ItemView {
 	): void {
 		const folder = binding.sharedFolder;
 		const headerEl = container.createDiv({
-			cls: "tree-item-self nav-folder-title is-clickable mod-collapsible system3-pill has-focus system3-sync-status-folder",
+			cls: "tree-item-self nav-folder-title is-clickable mod-collapsible freelay-pill has-focus freelay-sync-status-folder",
 		});
 		headerEl.dataset.path = folder.path;
 		headerEl.setAttr("draggable", "false");
@@ -376,7 +376,7 @@ export class SyncStatusView extends ItemView {
 			const menus = anchorEl.ownerDocument.querySelectorAll<HTMLElement>(".menu");
 			const menuEl = menus[menus.length - 1];
 			if (!menuEl) return;
-			menuEl.addClass("system3-sync-status-folder-menu");
+			menuEl.addClass("freelay-sync-status-folder-menu");
 			menuEl.setCssStyles({
 				left: `${rect.left}px`,
 				right: "auto",

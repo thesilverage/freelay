@@ -25,17 +25,17 @@ export class EmbedBanner {
 		}
 
 		// container to enable easy removal of the banner
-		let bannerBox = leafContentEl.querySelector(".system3-banner-box");
+		let bannerBox = leafContentEl.querySelector(".freelay-banner-box");
 		if (!bannerBox) {
 			bannerBox = leafContentEl.createDiv();
-			bannerBox.classList.add("system3-banner-box");
+			bannerBox.classList.add("freelay-banner-box");
 			leafContentEl.insertBefore(bannerBox, contentEl);
 		}
 
-		let banner = leafContentEl.querySelector(".system3-banner");
+		let banner = leafContentEl.querySelector(".freelay-banner");
 		if (!banner) {
 			banner = leafContentEl.createDiv();
-			banner.classList.add("system3-banner");
+			banner.classList.add("freelay-banner");
 			const span = banner.createSpan();
 			span.setText(this.text);
 			banner.appendChild(span);
@@ -56,7 +56,7 @@ export class EmbedBanner {
 		if (!leafContentEl) {
 			return;
 		}
-		const bannerBox = leafContentEl.querySelector(".system3-banner-box");
+		const bannerBox = leafContentEl.querySelector(".freelay-banner-box");
 		if (bannerBox) {
 			bannerBox.replaceChildren();
 		}

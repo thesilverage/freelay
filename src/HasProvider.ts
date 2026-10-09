@@ -216,13 +216,15 @@ export class HasProvider extends HasLogging {
 			this._awarenessActive,
 		);
 		this._provider.beforeReconnect = async () => {
+			this.tokenStore.invalidateDocument(S3RN.encode(this.s3rn));
 			const clientToken = await this.getProviderToken();
 			this.refreshProvider(clientToken);
 		};
 
 		const connectionErrorSub = this.providerConnectionErrorSubscription(
 			(event) => {
-				this.log(`[${this.path}] connection error`, event);
+				// Browser events can contain a WebSocket URL with a bearer token.
+				this.log(`[${this.path}] connection error`);
 			},
 		);
 		connectionErrorSub.on();

@@ -50,8 +50,6 @@
 	const relayManager = plugin.relayManager;
 	const relayRoles = relayManager.relayRoles;
 	const relays = relayManager.relays;
-	const subscriptions = relayManager.subscriptions;
-	const providers = relayManager.providers;
 	const sharedFolders = plugin.sharedFolders;
 	let sharedFolder: SharedFolder | undefined;
 
@@ -179,7 +177,7 @@
 				remoteFolder,
 				component: currentComponent,
 			});
-			currentRelay = await plugin.relayManager.createRelay("");
+			currentRelay = await plugin.relayManager.createRelay("New relay");
 			currentComponent = ManageRelay;
 		} catch (error: any) {
 			handleServerError(error, "Failed to create relay");
@@ -314,8 +312,6 @@
 			<LoggedIn {plugin}>
 				<Relays
 					{relays}
-					{subscriptions}
-					{providers}
 					{plugin}
 					on:manageRelay={handleManageRelayEvent}
 					on:manageSharedFolder={handleManageSharedFolderEvent}

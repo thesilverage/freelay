@@ -59,7 +59,7 @@
 
 	function finish() {
 		if (requiresReload) {
-			new Notice("Reload the Relay plugin to apply feature flag changes.", 8000);
+			new Notice("Reload the Freelay plugin to apply feature flag changes.", 8000);
 		}
 		close();
 	}
@@ -153,7 +153,7 @@
 	<div class="modal-button-container relay-feature-flag-footer">
 		{#if requiresReload}
 			<span class="relay-feature-flag-reload-note">
-				Reload the Relay plugin to apply changes.
+				Reload the Freelay plugin to apply changes.
 			</span>
 		{/if}
 		<button class="mod-cta" on:click={finish}>Done</button>

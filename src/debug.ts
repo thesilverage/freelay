@@ -598,23 +598,23 @@ class RelayMetrics {
 		// Network requests
 		this.networkRequests = api.createCounter({
 			name: "relay_network_requests_total",
-			help: "Total Relay network requests by destination domain, transport, method, and result",
+			help: "Total Freelay network requests by destination domain, transport, method, and result",
 			labelNames: ["domain", "transport", "method", "status_class", "result"],
 		});
 		this.networkRequestDuration = api.createHistogram({
 			name: "relay_network_request_duration_seconds",
-			help: "Relay network request duration by destination domain, transport, method, and result",
+			help: "Freelay network request duration by destination domain, transport, method, and result",
 			labelNames: ["domain", "transport", "method", "status_class", "result"],
 			buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
 		});
 		this.networkRequestBytes = api.createCounter({
 			name: "relay_network_request_bytes",
-			help: "Relay network response bytes by destination domain, transport, method, and result",
+			help: "Freelay network response bytes by destination domain, transport, method, and result",
 			labelNames: ["domain", "transport", "method", "status_class", "result"],
 		});
 		this.networkWebSocketConnections = api.createCounter({
 			name: "relay_network_websocket_connections_total",
-			help: "Relay WebSocket connection attempts by destination domain and result",
+			help: "Freelay WebSocket connection attempts by destination domain and result",
 			labelNames: ["domain", "result"],
 		});
 
@@ -995,7 +995,7 @@ export function initializeMetrics(
 			}
 			metrics.initializeFromAPI(
 				api.getStore("relay", {
-					displayName: "Relay",
+					displayName: "Freelay",
 					description:
 						"Sync engine metrics: document storage, protocol IO, and network requests.",
 				}),

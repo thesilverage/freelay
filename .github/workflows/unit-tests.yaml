@@ -1,78 +1,25 @@
-name: Unit Tests
-
-# Runs the private unit tests (encrypted in this repository with git-crypt)
-# on the unit-test VM. Test names and failures stay in the private report;
-# the public job summary carries counts only.
-#
-# The work happens in .github/ci/lane.sh (fixed-VM mode, unit suite), which
-# runs the same way from a workstation; this file only maps inputs onto it.
-
+name: Public Freelay tests
 on:
   push:
     branches: [main]
-    tags:
-      - '*.*.*'
+  pull_request:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: 'Ref to test (e.g. origin/main, origin/feature-x, a tag, or a SHA)'
-        required: true
-        default: 'origin/main'
-
-# One run at a time: the unit tests own one VM.
-concurrency:
-  group: unit-tests-private
-  cancel-in-progress: false
-
-env:
-  GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
-  VM_ZONE: ${{ secrets.GCP_VM_ZONE }}
-  CI_R2_BUCKET: system3-ci
-  CI_R2_ENDPOINT: ${{ secrets.CI_R2_ENDPOINT }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.CI_R2_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_R2_SECRET_ACCESS_KEY }}
-
 permissions:
   contents: read
-
 jobs:
-  unit-test:
-    name: private unit tests
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          sparse-checkout: .github/ci
           persist-credentials: false
-
-      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
-
-      - name: Run the unit tests on the unit-test VM
-        env:
-          HARNESS_DEPLOY_KEY: ${{ secrets.HARNESS_DEPLOY_KEY }}
-          CI_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          RELAY_GIT_CRYPT_KEY_B64: ${{ secrets.RELAY_GIT_CRYPT_KEY_B64 }}
-          VM: ${{ format('{0}-unit', secrets.GCP_VM_NAME) }}
-          # A dispatch tests its ref; a tag push its tag; a branch push the
-          # exact triggering commit.
-          REF: ${{ inputs.ref || (github.ref_type == 'tag' && format('refs/tags/{0}', github.ref_name)) || github.sha }}
-        run: >-
-          .github/ci/lane.sh run --lane unit --vm "$VM" --suite unit
-          --ref "$REF" --harness-ref origin/main
-
-      - name: Release the VM
-        if: always()
-        run: .github/ci/lane.sh cleanup
-
-      - name: Summarize
-        if: always()
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
-        with:
-          script: |
-            await require(`${process.env.GITHUB_WORKSPACE}/.github/ci/summary.js`)(
-              { github, context, core }, { title: 'Unit test results', table: false });
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - run: ./node_modules/.bin/tsc --noEmit --skipLibCheck

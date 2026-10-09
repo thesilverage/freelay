@@ -124,7 +124,7 @@
 			<span class="suggestion-action">Enter to create</span>
 		{:else if item.isShared && !item.hasRelay}
 			<div class="suggestion-icon">
-				<Layers class="system3-svg-icon" size={16} />
+				<Layers class="freelay-svg-icon" size={16} />
 			</div>
 		{:else}
 			<div class="suggestion-icon"></div>
@@ -148,7 +148,7 @@
 		align-items: center;
 	}
 
-	:global(.system3-svg-icon) {
+	:global(.freelay-svg-icon) {
 		color: var(--text-muted);
 		opacity: 0.6;
 	}

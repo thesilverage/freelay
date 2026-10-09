@@ -68,7 +68,7 @@ async function requestOnce(target: URL, params: RequestUrlParam, options: NodeRe
 	const body = typeof params.body === "string" ? Buffer.from(params.body) : params.body ? Buffer.from(params.body) : undefined;
 	const headers: Record<string, string> = { ...params.headers, "accept-encoding": "identity" };
 	delete headers.host;
-	headers["user-agent"] ??= `Relay/${GIT_TAG} Obsidian/${apiVersion}`;
+	headers["user-agent"] ??= `Freelay/${GIT_TAG} Obsidian/${apiVersion}`;
 	if (params.contentType) headers["content-type"] = params.contentType;
 	if (body) headers["content-length"] = String(body.byteLength);
 	return new Promise((resolve, reject) => {

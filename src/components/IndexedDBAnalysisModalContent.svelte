@@ -71,8 +71,8 @@
 	});
 </script>
 
-<div class="modal-title">Relay database analysis</div>
-<div class="system3-indexeddb-analysis">
+<div class="modal-title">Freelay database analysis</div>
+<div class="freelay-indexeddb-analysis">
 	<div class="setting-item">
 		<div class="setting-item-info">
 			<div class="setting-item-name">Search across vaults</div>
@@ -92,7 +92,7 @@
 					searchAcrossVaults = !searchAcrossVaults;
 					analyzeStores();
 				}}
-				class="checkbox-container system3-dangerous"
+				class="checkbox-container freelay-dangerous"
 				class:is-enabled={searchAcrossVaults}
 				on:click={() => {
 					searchAcrossVaults = !searchAcrossVaults;
@@ -106,53 +106,53 @@
 	</div>
 
 	{#if $isLoading}
-		<div class="system3-loading-container">
-			<div class="system3-loading-spinner"></div>
+		<div class="freelay-loading-container">
+			<div class="freelay-loading-spinner"></div>
 			<div class="loading-text">Analyzing Databases...</div>
-			<div class="system3-progress-bar">
-				<div class="system3-progress-fill" style="width: {$progress}%"></div>
+			<div class="freelay-progress-bar">
+				<div class="freelay-progress-fill" style="width: {$progress}%"></div>
 			</div>
 		</div>
 	{:else if $error}
-		<div class="system3-error-message">
+		<div class="freelay-error-message">
 			{$error}
 		</div>
 	{:else if $stats}
-		<div class="system3-summary-stats">
-			<div class="system3-stat-item system3-global-count">
-				<div class="system3-stat-label">Global Database Limit</div>
+		<div class="freelay-summary-stats">
+			<div class="freelay-stat-item freelay-global-count">
+				<div class="freelay-stat-label">Global Database Limit</div>
 				<div
-					class="system3-stat-value"
-					class:system3-warning={$stats.databaseCount > 40000}
-					class:system3-critical={$stats.databaseCount > 45000}
+					class="freelay-stat-value"
+					class:freelay-warning={$stats.databaseCount > 40000}
+					class:freelay-critical={$stats.databaseCount > 45000}
 				>
 					{$stats.databaseCount.toLocaleString()} / 50,000
 				</div>
 				{#if $stats.databaseCount > 45000}
-					<div class="system3-warning-text system3-critical">
+					<div class="freelay-warning-text freelay-critical">
 						Critical: approaching IndexedDB database limit!<br />
 						Your browser may start deleting old databases soon.
 					</div>
 				{:else if $stats.databaseCount > 40000}
-					<div class="system3-warning-text">
+					<div class="freelay-warning-text">
 						Warning: high number of databases.<br />
 						Consider cleaning up unused databases.
 					</div>
 				{/if}
 			</div>
-			<div class="system3-stat-item">
-				<div class="system3-stat-label">Relay Databases</div>
-				<div class="system3-stat-value">{$stats.totalStores}</div>
+			<div class="freelay-stat-item">
+				<div class="freelay-stat-label">Freelay Databases</div>
+				<div class="freelay-stat-value">{$stats.totalStores}</div>
 			</div>
-			<div class="system3-stat-item">
-				<div class="system3-stat-label">Document Updates</div>
-				<div class="system3-stat-value">
+			<div class="freelay-stat-item">
+				<div class="freelay-stat-label">Document Updates</div>
+				<div class="freelay-stat-value">
 					{$stats.totalItems.toLocaleString()}
 				</div>
 			</div>
-			<div class="system3-stat-item">
-				<div class="system3-stat-label">Total Size</div>
-				<div class="system3-stat-value">{$stats.totalSizeMB.toFixed(2)} MB</div>
+			<div class="freelay-stat-item">
+				<div class="freelay-stat-label">Total Size</div>
+				<div class="freelay-stat-value">{$stats.totalSizeMB.toFixed(2)} MB</div>
 			</div>
 		</div>
 
@@ -160,14 +160,14 @@
 			<SettingItemHeading name="Large Stores (>1MB)" />
 			{#each sortedRelayGroups as [relay, relayStores]}
 				<SettingItemHeading
-					name={relay === "local" ? "Tracked Documents" : `Relay: ${relay}`}
+					name={relay === "local" ? "Tracked Documents" : `Freelay: ${relay}`}
 				/>
 				{#each relayStores as store}
 					<SettingItem
 						name={store.path || store.slug}
 						description="Size: {store.estimatedSizeMB}MB, Items: {store.count}"
 					>
-						<div class="system3-actions">
+						<div class="freelay-actions">
 							<button
 								class="mod-warning"
 								on:click={() => handleDelete(store.slug)}
@@ -184,16 +184,16 @@
 </div>
 
 <style>
-	.system3-dangerous:enabled {
+	.freelay-dangerous:enabled {
 		background-color: var(--background-modifier-error);
 	}
-	.system3-indexeddb-analysis {
+	.freelay-indexeddb-analysis {
 		padding: 1rem;
 		max-height: 500px;
 		overflow-y: auto;
 	}
 
-	.system3-loading-container {
+	.freelay-loading-container {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -202,7 +202,7 @@
 		gap: 1rem;
 	}
 
-	.system3-loading-spinner {
+	.freelay-loading-spinner {
 		border: 4px solid var(--background-modifier-border);
 		border-top: 4px solid var(--interactive-accent);
 		border-radius: 50%;
@@ -211,7 +211,7 @@
 		animation: spin 1s linear infinite;
 	}
 
-	.system3-progress-bar {
+	.freelay-progress-bar {
 		width: 80%;
 		height: 8px;
 		border-radius: 4px;
@@ -220,7 +220,7 @@
 		margin: 0 auto;
 	}
 
-	.system3-progress-fill {
+	.freelay-progress-fill {
 		height: 100%;
 		background-color: var(--color-accent);
 		border-radius: 4px;
@@ -229,19 +229,19 @@
 		max-width: 100%;
 	}
 
-	.system3-error-message {
+	.freelay-error-message {
 		color: var(--text-error);
 		padding: 1rem;
 		background-color: var(--mod-error);
 		border-radius: 4px;
 	}
 
-	.system3-actions {
+	.freelay-actions {
 		display: flex;
 		gap: 0.5rem;
 	}
 
-	.system3-summary-stats {
+	.freelay-summary-stats {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
 		gap: 1rem;
@@ -251,44 +251,44 @@
 		border-radius: 4px;
 	}
 
-	.system3-stat-item {
+	.freelay-stat-item {
 		text-align: center;
 	}
 
-	.system3-global-count {
+	.freelay-global-count {
 		grid-column: 1 / -1;
 		padding-top: 0.5rem;
 		margin-top: 0.5rem;
 		border-bottom: 1px solid var(--background-modifier-border);
 	}
 
-	.system3-warning {
+	.freelay-warning {
 		color: var(--text-warning);
 	}
 
-	.system3-critical {
+	.freelay-critical {
 		color: var(--text-error);
 	}
 
-	.system3-warning-text {
+	.freelay-warning-text {
 		font-size: 0.8em;
 		margin-top: 0.5rem;
 		color: var(--text-warning);
 		line-height: 1.4;
 	}
 
-	.system3-warning-text.system3-critical {
+	.freelay-warning-text.freelay-critical {
 		color: var(--text-error);
 		font-weight: bold;
 	}
 
-	.system3-stat-label {
+	.freelay-stat-label {
 		font-size: 0.9em;
 		color: var(--text-muted);
 		margin-bottom: 0.5rem;
 	}
 
-	.system3-stat-value {
+	.freelay-stat-value {
 		font-size: 1.2em;
 		font-weight: bold;
 	}

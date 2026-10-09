@@ -5,7 +5,6 @@ import type { TimeProvider } from "./TimeProvider";
 import { LoginManager } from "./LoginManager";
 import { curryLog } from "./debug";
 import type { ClientToken, FileToken } from "./client/types";
-import { LocalStorage } from "./LocalStorage";
 import {
 	S3RN,
 	S3RemoteDocument,
@@ -14,8 +13,6 @@ import {
 	S3RemoteFile,
 	S3RemoteCanvas,
 } from "./S3RN";
-import { customFetch, getRelayRequestHeaders } from "./customFetch";
-import { httpErrorFromResponse } from "./HttpError";
 
 function getJwtExpiryFromClientToken(clientToken: ClientToken): number {
 	// lol this is so fake
@@ -55,7 +52,6 @@ export async function refresh(
 	context?: RefreshContext<ClientToken>,
 ) {
 	const debug = curryLog("[TokenStore][Refresh]", "debug");
-	const error = curryLog("[TokenStore][Refresh]", "error");
 	debug(`${documentId}`);
 	const entity: S3RNType = S3RN.decode(documentId);
 	let payloadObj: Record<string, string | boolean>;
@@ -98,38 +94,25 @@ export async function refresh(
 		// Submitting the held token asks the server to bypass its auth cache.
 		payloadObj.supersede = context.heldToken.token;
 	}
-	const payload = JSON.stringify(payloadObj);
-	const headers = {
-		Authorization: `Bearer ${loginManager.user?.token}`,
-		...getRelayRequestHeaders(),
-		"Content-Type": "application/json",
-	};
 	try {
-		const apiUrl = loginManager.getEndpointManager().getApiUrl();
-		const response = await customFetch(`${apiUrl}/token`, {
-			method: "POST",
-			headers: headers,
-			body: payload,
-			relayNetworkDomain: "api",
-		});
-
-		if (!response.ok) {
-			const body = await response.text();
-			debug(response.status, body);
-			onError(httpErrorFromResponse(response.status, body));
-			return;
-		}
-
-		const clientToken = (await response.json()) as ClientToken;
-		onSuccess(clientToken);
+		const client = loginManager.control;
+		if (!client) throw new Error("Not connected");
+		const token = await client.token<ClientToken>("token", payloadObj);
+		if (!loginManager.loggedIn || loginManager.control !== client) throw new Error("Connection changed during token request");
+		onSuccess(token);
 	} catch (reason) {
-		error(reason, payload);
 		onError(reason as Error);
 	}
 }
 
 export class LiveTokenStore extends TokenStore<ClientToken> {
 	private deviceId: string;
+
+	/** WebSocket handshakes hide HTTP status. Reconnect obtains a fresh grant. */
+	invalidateDocument(documentId: string): void {
+		const cached = this.tokenMap.get(documentId);
+		if (cached) this.tokenMap.set(documentId, {...cached, expiryTime: 0});
+	}
 
 	constructor(
 		private loginManager: LoginManager,
@@ -145,9 +128,8 @@ export class LiveTokenStore extends TokenStore<ClientToken> {
 				refresh: withLoginManager(loginManager, deviceId, refresh),
 				getJwtExpiry: getJwtExpiryFromClientToken,
 				getStorage: function () {
-					return new LocalStorage<TokenInfo<ClientToken>>(
-						"TokenStore/" + vaultName,
-					);
+					// Grants are cheap to reacquire and must not survive profile changes.
+					return new Map<string, TokenInfo<ClientToken>>();
 				},
 				getTimeProvider: () => {
 					return timeProvider;
@@ -244,30 +226,11 @@ export class LiveTokenStore extends TokenStore<ClientToken> {
 		if (!this.loginManager.loggedIn) {
 			throw new Error("Not logged in");
 		}
-		const headers = {
-			Authorization: `Bearer ${this.loginManager.user?.token}`,
-			...getRelayRequestHeaders(),
-			"Content-Type": "application/json",
-		};
-		const apiUrl = this.loginManager.getEndpointManager().getApiUrl();
-		const response = await customFetch(`${apiUrl}/file-token`, {
-			method: "POST",
-			headers: headers,
-			body: payload,
-			relayNetworkDomain: "api",
-		});
-
-		if (!response.ok) {
-			// Read the body once — it can only be consumed a single time — and
-			// classify by HTTP status so callers can tell a transient server
-			// failure (retryable) from a permission-class refusal (not).
-			const body = await response.text();
-			debug(response.status, body);
-			throw httpErrorFromResponse(response.status, body);
-		}
-
-		const clientToken = (await response.json()) as FileToken;
-		return clientToken;
+		const client = this.loginManager.control;
+		if (!client) throw new Error("Not connected");
+		const token = await client.token<FileToken>("file-token", JSON.parse(payload));
+		if (!this.loginManager.loggedIn || this.loginManager.control !== client) throw new Error("Connection changed during token request");
+		return token;
 	}
 
 	async getFileToken(
@@ -275,6 +238,7 @@ export class LiveTokenStore extends TokenStore<ClientToken> {
 		fileHash: string,
 		contentType: string,
 		contentLength: number,
+		force = false,
 	): Promise<FileToken> {
 		if (this.isDestroyed()) {
 			return Promise.reject(this.getDestroyedError());
@@ -283,7 +247,7 @@ export class LiveTokenStore extends TokenStore<ClientToken> {
 		const tokenInfo = this.tokenMap.get(key);
 		// Leave time to exchange the cached token for a transfer URL.
 		if (
-			tokenInfo?.token &&
+			!force && tokenInfo?.token &&
 			this.isTokenValid(tokenInfo) &&
 			!this.shouldRefresh(tokenInfo)
 		) {

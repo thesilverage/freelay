@@ -108,7 +108,7 @@
 						{#if item.relay.name}
 							{item.relay.name}
 						{:else}
-							<span class="faint">(Untitled Relay Server)</span>
+							<span class="faint">(Untitled relay)</span>
 						{/if}
 					{:else if item.type === "folder"}
 						{item.folder.name}

@@ -6,7 +6,7 @@ import { SidebarNoticeMount } from "./SidebarNoticeMount";
 
 export class MetadataHealthSidebarNoticeMount extends SidebarNoticeMount {
 	constructor(workspace: Workspace, metadataHealth: MetadataHealth) {
-		super(workspace, "system3-metadata-health-slot", (target, anchor) =>
+		super(workspace, "freelay-metadata-health-slot", (target, anchor) =>
 			mountComponent(MetadataHealthNotice, { target, anchor, props: { metadataHealth } }));
 	}
 }

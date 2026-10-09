@@ -9,6 +9,7 @@ export class LiveSettingsTab extends PluginSettingTab {
 	plugin: Live;
 	component?: MountedComponent;
 	targetEl!: HTMLElement;
+	private stopMetadata?: () => void;
 	constructor(app: App, plugin: Live) {
 		super(app, plugin);
 		this.plugin = plugin;
@@ -26,7 +27,8 @@ export class LiveSettingsTab extends PluginSettingTab {
 		const { containerEl } = this;
 		this.targetEl = containerEl.parentElement as HTMLElement;
 		this.targetEl.empty();
-		void this.plugin.relayManager.update();
+		this.stopMetadata?.();
+		this.stopMetadata = this.plugin.relayManager.watchMetadata();
 		this.component = mountComponent(PluginSettings, {
 			target: this.targetEl,
 			props: {
@@ -50,6 +52,8 @@ export class LiveSettingsTab extends PluginSettingTab {
 	}
 
 	hide(): void {
+		this.stopMetadata?.();
+		this.stopMetadata = undefined;
 		try {
 			this.component?.destroy();
 			//(this as any).setting.close();

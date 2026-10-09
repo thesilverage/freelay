@@ -43,6 +43,8 @@ permissions:
 
 jobs:
   multinode:
+    # Archived upstream private harness; Freelay uses public tests.
+    if: ${{ false }}
     name: multinode
     runs-on: ubuntu-latest
     timeout-minutes: 90

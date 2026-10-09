@@ -46,7 +46,7 @@ import { ActionLineDivider } from "./actionLineDivider";
 import { flags } from "src/flagManager";
 import { curryLog } from "src/debug";
 
-export const VIEW_TYPE_DIFFERENCES = "system3-differences-view";
+export const VIEW_TYPE_DIFFERENCES = "freelay-differences-view";
 
 interface DiffTextRun {
 	text: string;

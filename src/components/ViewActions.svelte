@@ -22,25 +22,25 @@
 	// doesn't flash CloudOff while the individual doc is still connecting.
 	$: draftActive = !draftMode && (opsFlowing || folderConnected);
 	$: draftIconClass = draftMode
-		? "system3-paused"
+		? "freelay-paused"
 		: draftActive
-			? "system3-connected"
-			: "system3-disconnected";
+			? "freelay-connected"
+			: "freelay-disconnected";
 	$: draftLabel = draftMode
-		? `${remote?.relay?.name || "Relay"} (draft)`
+		? `${remote?.relay?.name || "Freelay"} (draft)`
 		: draftActive
-			? `${remote?.relay?.name || "Relay"} (connected)`
-			: `${remote?.relay?.name || "Relay"} (disconnected)`;
+			? `${remote?.relay?.name || "Freelay"} (connected)`
+			: `${remote?.relay?.name || "Freelay"} (disconnected)`;
 
 	// Draft mode off: the satellite reflects the doc's own connection status
 	$: satelliteClass = opsFlowing
-		? "system3-connected"
-		: draftMode ? "system3-paused" : `system3-${state.status}`;
+		? "freelay-connected"
+		: draftMode ? "freelay-paused" : `freelay-${state.status}`;
 	$: satelliteLabel = opsFlowing
-		? `${remote?.relay?.name || "Relay"} (connected)`
+		? `${remote?.relay?.name || "Freelay"} (connected)`
 		: draftMode
-			? `${remote?.relay?.name || "Relay"} (paused)`
-			: `${remote?.relay?.name || "Relay"} (${state.status})`;
+			? `${remote?.relay?.name || "Freelay"} (paused)`
+			: `${remote?.relay?.name || "Freelay"} (${state.status})`;
 
 	const handleClick = () => {
 		if (isLoggedOut && onLogin) {
@@ -71,7 +71,7 @@
 
 {#if isLoggedOut}
 	<button
-		class="clickable-icon view-action system3-view-action mod-warning"
+		class="clickable-icon view-action freelay-view-action mod-warning"
 		aria-label="Login to enable Live edits"
 		tabindex="0"
 		on:click={handleClick}
@@ -82,7 +82,7 @@
 {:else if remote}
 	{#if !enableDraftMode}
 		<button
-			class="clickable-icon view-action system3-view-action {tracking
+			class="clickable-icon view-action freelay-view-action {tracking
 				? 'notebook-synced'
 				: 'notebook'}"
 			aria-label={tracking
@@ -98,7 +98,7 @@
 	{/if}
 	{#if enableDraftMode}
 		<button
-			class="{draftIconClass} clickable-icon view-action system3-view-action"
+			class="{draftIconClass} clickable-icon view-action freelay-view-action"
 			aria-label={draftLabel}
 			tabindex="0"
 			on:click={handleClick}
@@ -112,13 +112,13 @@
 				<CloudOff class="svg-icon inline-icon" />
 			{/if}
 			{#if pendingOutbound > 0 || pendingInbound > 0}
-				<span class="system3-pending-count"
+				<span class="freelay-pending-count"
 					>{#if pendingOutbound > 0}{pendingOutbound}&#x2191;{/if}{#if pendingInbound > 0}{pendingInbound}&#x2193;{/if}</span>
 			{/if}
 		</button>
 	{:else}
 		<button
-			class="{satelliteClass} clickable-icon view-action system3-view-action"
+			class="{satelliteClass} clickable-icon view-action freelay-view-action"
 			aria-label={satelliteLabel}
 			tabindex="0"
 			on:click={handleClick}
@@ -129,7 +129,7 @@
 	{/if}
 {:else if !enableDraftMode}
 	<button
-		class="clickable-icon view-action system3-view-action {tracking
+		class="clickable-icon view-action freelay-view-action {tracking
 			? 'notebook-synced'
 			: 'notebook'}"
 		aria-label={tracking
@@ -152,16 +152,16 @@
 	button.notebook-synced {
 		color: var(--color-accent);
 	}
-	button.system3-connected {
+	button.freelay-connected {
 		color: var(--color-accent);
 	}
-	button.system3-disconnected {
+	button.freelay-disconnected {
 		color: var(--color-base-40);
 	}
-	button.system3-paused {
+	button.freelay-paused {
 		color: var(--color-base-40);
 	}
-	.system3-pending-count {
+	.freelay-pending-count {
 		font-size: 0.75em;
 		margin-left: 0.15em;
 	}

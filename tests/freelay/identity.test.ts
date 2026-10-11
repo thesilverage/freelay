@@ -14,7 +14,14 @@ test("frozen auth v1 vector matches Rust and independent Node signer", async () 
 });
 function secrets() {
 	const values = new Map<string, string>();
-	return {getSecret: (key: string) => values.get(key) ?? null, setSecret: (key: string, value: string) => {values.set(key, value);}, values};
+	const validate = (key: string) => {
+		if (!/^[a-z0-9-]{1,64}$/.test(key)) throw new Error("Secret ID is invalid");
+	};
+	return {
+		getSecret: (key: string) => { validate(key); return values.get(key) ?? null; },
+		setSecret: (key: string, value: string) => { validate(key); values.set(key, value); },
+		values,
+	};
 }
 
 test("local profile namespaces canonicalize URLs but isolate hosts and base paths", async () => {
@@ -33,6 +40,7 @@ test("secret storage persists per-server identity and exports no private data", 
 	expect(await first.principal()).toBe(await second.principal());
 	expect(await first.publicKey()).not.toBe(await new IdentityKeyStore(store, "https://other.test", cryptoApi).publicKey());
 	expect(store.values.size).toBe(2);
+	for (const id of store.values.keys()) expect(id).toMatch(/^freelay-identity-a-[a-f0-9]{40}$/);
 });
 
 test("replacement staging preserves the active key, supports rollback, and erases only this profile", async () => {

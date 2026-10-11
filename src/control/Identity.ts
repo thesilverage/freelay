@@ -74,7 +74,14 @@ export class IdentityKeyStore {
 	}
 
 	private async secretId(slot: "active" | "replacement" | "previous" = this.slot): Promise<string> {
-		return "freelay-identity-" + await profileStorageKey(this.audience, this.cryptoApi) + (slot === "active" ? "" : "-" + slot);
+		// Obsidian secret IDs accept only lowercase letters, numbers, and dashes,
+		// with a 64-character maximum. Base64url is suitable for cache namespaces
+		// but may contain uppercase letters and underscores, so use a 160-bit hex
+		// profile identifier and a compact explicit slot here instead.
+		const digest = new Uint8Array(await this.cryptoApi.subtle.digest("SHA-256", text.encode(this.audience)));
+		const profile = Array.from(digest.slice(0, 20), byte => byte.toString(16).padStart(2, "0")).join("");
+		const slotId = { active: "a", replacement: "r", previous: "p" }[slot];
+		return `freelay-identity-${slotId}-${profile}`;
 	}
 
 	replacement(): IdentityKeyStore { return new IdentityKeyStore(this.secrets, this.audience, this.cryptoApi, "replacement"); }

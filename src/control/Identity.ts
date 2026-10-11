@@ -1,3 +1,5 @@
+import { ed25519 } from "@noble/curves/ed25519";
+
 /** Freelay auth v1. Times on this interface are Unix seconds, not milliseconds. */
 export interface Challenge {
 	version: number;
@@ -67,7 +69,7 @@ export function transcript(c: Challenge): Uint8Array {
 
 /** Private seed stays in SecretStorage; this service never serializes it as settings. */
 export class IdentityKeyStore {
-	private loading?: Promise<{ key: CryptoKey; publicKey: string }>;
+	private loading?: Promise<{ publicKey: string }>;
 	readonly audience: string;
 	constructor(private readonly secrets: SecretStorage, audience: string, private readonly cryptoApi: Crypto = globalThis.crypto, private readonly slot: "active" | "replacement" = "active") {
 		this.audience = canonicalUrl(audience);
@@ -118,33 +120,24 @@ export class IdentityKeyStore {
 		this.clearMemory();
 	}
 
-	private async load(): Promise<{ key: CryptoKey; publicKey: string }> {
+	private async load(): Promise<{ publicKey: string }> {
 		const id = await this.secretId();
-		let stored = this.secrets.getSecret(id);
-		if (!stored) {
-			// Generating/importing must succeed before persisting anything. An
-			// unsupported runtime reports an actionable error, never a fallback key.
-			const generated = await this.cryptoApi.subtle.generateKey("Ed25519", true, ["sign", "verify"]) as CryptoKeyPair;
-			const jwk = await this.cryptoApi.subtle.exportKey("jwk", generated.privateKey);
-			if (!jwk.d) throw new Error("Ed25519 seed unavailable");
-			stored = "freelay-ed25519-v1:" + jwk.d;
-			this.secrets.setSecret(id, stored);
-		}
-		if (!stored.startsWith("freelay-ed25519-v1:")) throw new Error("Unsupported stored identity format");
-		const seed = decode(stored.slice("freelay-ed25519-v1:".length), 32);
-		// RFC 8410 PKCS#8 seed wrapper. No node/Electron API is required on mobile.
-		const pkcs8 = concat(new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]), seed);
+		const stored = this.secrets.getSecret(id);
+		const generated = !stored;
+		if (stored && !stored.startsWith("freelay-ed25519-v1:")) throw new Error("Unsupported stored identity format");
+		const seed = stored
+			? decode(stored.slice("freelay-ed25519-v1:".length), 32)
+			: this.cryptoApi.getRandomValues(new Uint8Array(32));
 		try {
-			const extractable = await this.cryptoApi.subtle.importKey("pkcs8", pkcs8, "Ed25519", true, ["sign"]);
-			const jwk = await this.cryptoApi.subtle.exportKey("jwk", extractable);
-			if (!jwk.x) throw new Error("Ed25519 public key unavailable");
-			decode(jwk.x, 32);
-			const key = await this.cryptoApi.subtle.importKey("pkcs8", pkcs8, "Ed25519", false, ["sign"]);
-			return { key, publicKey: jwk.x };
-		} finally { seed.fill(0); pkcs8.fill(0); }
+			const publicKey = encode(ed25519.getPublicKey(seed));
+			// Derivation must succeed before a new seed is persisted. The storage
+			// format and wire public key are unchanged from the WebCrypto path.
+			if (generated) this.secrets.setSecret(id, "freelay-ed25519-v1:" + encode(seed));
+			return { publicKey };
+		} finally { seed.fill(0); }
 	}
 
-	private identity(): Promise<{ key: CryptoKey; publicKey: string }> {
+	private identity(): Promise<{ publicKey: string }> {
 		if (!this.loading) this.loading = this.load().catch(error => { this.loading = undefined; throw error; });
 		return this.loading;
 	}
@@ -160,7 +153,11 @@ export class IdentityKeyStore {
 	async sign(c: Challenge): Promise<string> {
 		const identity = await this.identity();
 		if (c.audience !== this.audience || c.publicKey !== identity.publicKey || c.expiresAt <= c.issuedAt || c.expiresAt - c.issuedAt > 60) throw new Error("Challenge binding mismatch");
-		return encode(new Uint8Array(await this.cryptoApi.subtle.sign("Ed25519", identity.key, transcript(c))));
+		const stored = this.secrets.getSecret(await this.secretId());
+		if (!stored?.startsWith("freelay-ed25519-v1:")) throw new Error("Identity unavailable");
+		const seed = decode(stored.slice("freelay-ed25519-v1:".length), 32);
+		try { return encode(ed25519.sign(transcript(c), seed)); }
+		finally { seed.fill(0); }
 	}
 	clearMemory(): void { this.loading = undefined; }
 }

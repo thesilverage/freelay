@@ -43,6 +43,25 @@ test("secret storage persists per-server identity and exports no private data", 
 	for (const id of store.values.keys()) expect(id).toMatch(/^freelay-identity-a-[a-f0-9]{40}$/);
 });
 
+test("identity generation and signing do not require WebCrypto Ed25519", async () => {
+	const digestAndRandomCrypto = {
+		subtle: { digest: cryptoApi.subtle.digest.bind(cryptoApi.subtle) },
+		getRandomValues: cryptoApi.getRandomValues.bind(cryptoApi),
+	} as unknown as Crypto;
+	const identity = new IdentityKeyStore(secrets(), "https://mobile.example.test/", digestAndRandomCrypto);
+	const challenge: Challenge = {
+		version: 1,
+		id: encode(new Uint8Array(16)),
+		nonce: encode(new Uint8Array(32)),
+		audience: identity.audience,
+		publicKey: await identity.publicKey(),
+		issuedAt: 100,
+		expiresAt: 160,
+	};
+	const publicKey = await cryptoApi.subtle.importKey("raw", decode(challenge.publicKey, 32), "Ed25519", false, ["verify"]);
+	expect(await cryptoApi.subtle.verify("Ed25519", publicKey, decode(await identity.sign(challenge), 64), transcript(challenge))).toBe(true);
+});
+
 test("replacement staging preserves the active key, supports rollback, and erases only this profile", async () => {
 	const store = secrets();
 	const active = new IdentityKeyStore(store, "https://example.test/", cryptoApi);

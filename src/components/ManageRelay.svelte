@@ -612,8 +612,13 @@
 			name="Delete relay"
 			description="Irreversible. Stops new access now; the administrator’s collector removes stored data after the safety delay. Local files are preserved."
 		>
-			<label><input type="checkbox" bind:checked={confirmDeletion} /> Permanently delete this relay and every shared folder</label>
-			<button class="mod-warning" disabled={!confirmDeletion || deleting} on:click={handleDestroy}>Delete relay</button>
+			<div class="confirmation-controls">
+				<label class="confirmation">
+					<input type="checkbox" bind:checked={confirmDeletion} />
+					<span>Permanently delete this relay and every shared folder.</span>
+				</label>
+				<button class="mod-warning" disabled={!confirmDeletion || deleting} on:click={handleDestroy}>Delete relay</button>
+			</div>
 		</SettingItem>
 	</SettingGroup>
 {/if}
@@ -693,6 +698,30 @@
 	.admin-toggle-btn:hover {
 		color: var(--text-normal);
 		text-decoration: underline;
+	}
+
+	.confirmation {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--size-4-2);
+		max-width: 24rem;
+		color: var(--text-muted);
+		font-size: var(--font-ui-smaller);
+		line-height: var(--line-height-tight);
+		white-space: normal;
+	}
+
+	.confirmation-controls {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: var(--size-4-2);
+		max-width: 100%;
+	}
+
+	.confirmation input {
+		flex: none;
+		margin-top: 0.15em;
 	}
 
 	.relay-auth-section {

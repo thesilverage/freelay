@@ -196,6 +196,7 @@ export class MemorySettingsStorage implements ISettingsStorage {
 export class Settings<T> extends Observable<T> {
 	private data: T;
 	private _loaded = false;
+	private updateQueue: Promise<void> = Promise.resolve();
 
 	constructor(
 		private readonly storage: StorageAdapter<T>,
@@ -233,15 +234,21 @@ export class Settings<T> extends Observable<T> {
 			this.warn("Attempted to update before loading settings from disk");
 			return;
 		}
-		const updated = updater(this.data);
-		const stored = await this.storage.loadData();
-		if (JSON.stringify(updated) === JSON.stringify(stored)) {
-			this.debug("updated matches disk, no change");
-			return;
-		}
-		this.data = updated;
-		await this.save();
-		this.notifyListeners();
+
+		const operation = this.updateQueue.then(async () => {
+			if (!this._loaded) return;
+			const updated = updater(this.data);
+			const stored = await this.storage.loadData();
+			if (JSON.stringify(updated) === JSON.stringify(stored)) {
+				this.debug("updated matches disk, no change");
+				return;
+			}
+			this.data = updated;
+			await this.save();
+			this.notifyListeners();
+		});
+		this.updateQueue = operation.catch(() => undefined);
+		return operation;
 	}
 
 	override notifyListeners() {
@@ -268,8 +275,6 @@ export class NamespacedSettings<
 	Parent extends Record<string, unknown> = Record<string, unknown>,
 > extends Observable<T> {
 	private readonly path: string[];
-	private readonly basePath: string[];
-	private readonly patterns: PathPattern[] = [];
 	private unsub?: Unsubscriber;
 	private lastKnown?: T;
 
@@ -279,13 +284,9 @@ export class NamespacedSettings<
 	) {
 		super(`NamespacedSettings[${namespace}]`);
 		this.validatePath(namespace);
-		[this.path, this.basePath, this.patterns] = this.processPath(namespace);
+		this.path = namespace.split("/").filter(Boolean);
 		this.lastKnown = this.getNestedValue(this.settings.get());
 		this.setupSubscription();
-	}
-
-	private isWildcardPattern(pattern: PathPattern): pattern is WildcardPattern {
-		return pattern.type === "wildcard";
 	}
 
 	private validatePath(path: string): void {
@@ -312,10 +313,6 @@ export class NamespacedSettings<
 		});
 	}
 
-	private hasArrayPatterns(): boolean {
-		return this.patterns.some((p) => p.type === "arrayMatch");
-	}
-
 	destroy() {
 		if (this.destroyed) return;
 
@@ -338,23 +335,6 @@ export class NamespacedSettings<
 			return {} as T;
 		}
 
-		const wildcardPattern = this.patterns.find((pattern): pattern is WildcardPattern =>
-			this.isWildcardPattern(pattern),
-		);
-		if (wildcardPattern && this.path.length === 1) {
-			const regex = new RegExp(`^${wildcardPattern.wildcardPattern}$`);
-			const filtered = Object.entries(data)
-				.filter(([key]) => regex.test(key))
-				.reduce(
-					(obj, [key, value]) => {
-						obj[key] = value;
-						return obj;
-					},
-					{} as Record<string, unknown>,
-				);
-			return filtered as T;
-		}
-
 		const value = this.getNestedValue(data);
 		if (value === undefined) {
 			return {} as T;
@@ -374,39 +354,6 @@ export class NamespacedSettings<
 
 		try {
 			await this.settings.update((data) => {
-				const wildcardPattern = this.patterns.find((pattern): pattern is WildcardPattern =>
-			this.isWildcardPattern(pattern),
-		);
-				if (wildcardPattern) {
-					if (this.path.length === 1) {
-						const regex = new RegExp(`^${wildcardPattern.wildcardPattern}$`);
-						const result = { ...data };
-						Object.entries(value).forEach(([key, val]) => {
-							if (regex.test(key)) {
-								result[key] = val;
-							}
-						});
-						return result;
-					}
-
-					const result = { ...data };
-					let current = result;
-
-					this.path.forEach((key) => {
-						current[key] = current[key] || {};
-						current = current[key] as Record<string, unknown>;
-					});
-
-					const regex = new RegExp(`^${wildcardPattern.wildcardPattern}$`);
-					Object.entries(value).forEach(([key, val]) => {
-						if (regex.test(key)) {
-							current[key] = val;
-						}
-					});
-
-					return result;
-				}
-
 				return this.setNestedValue(data, value);
 			});
 		} catch (error) {
@@ -442,99 +389,33 @@ export class NamespacedSettings<
 		await this.update((current) => current, true);
 	}
 
-	private processPath(namespace: string): [string[], string[], PathPattern[]] {
-		const segments = namespace.split("/").filter((p) => p);
-		const path: string[] = [];
-		const basePath: string[] = [];
-		const patterns: PathPattern[] = [];
-
-		segments.forEach((segment, index) => {
-			const arrayMatch = segment.match(/^\[(\w+)=(.+)\]$/);
-			const wildcardMatch = segment.match(/^\((.+?)\)$/);
-
-			if (arrayMatch) {
-				const [, key, value] = arrayMatch;
-				// For array patterns, use the previous segment or the prefix before [
-				const baseKey = index > 0 ? basePath[index - 1] : segment.split("[")[0];
-				patterns.push({
-					type: "arrayMatch",
-					key,
-					value,
-					level: index,
-				});
-				path.push(segment);
-				basePath.push(baseKey);
-			} else if (wildcardMatch) {
-				const [, pattern] = wildcardMatch;
-				patterns.push({
-					type: "wildcard",
-					wildcardPattern: this.createPatternRegex(pattern),
-					level: index,
-				});
-				path.push(segment);
-				basePath.push(segment);
-			} else {
-				path.push(segment);
-				basePath.push(segment);
-			}
-		});
-
-		return [path, basePath, patterns];
-	}
-
 	private getNestedValue(obj: Record<string, unknown>): T | undefined {
 		let current: unknown = obj;
+		for (let index = 0; index < this.path.length; index++) {
+			const segment = this.path[index];
+			const arrayMatch = this.parseArrayMatch(segment);
+			const wildcard = this.parseWildcard(segment);
 
-		// Special case: if we have a wildcard pattern at this level
-		const wildcardPattern = this.patterns.find((pattern): pattern is WildcardPattern =>
-			this.isWildcardPattern(pattern),
-		);
-		if (wildcardPattern && this.path.length === 1) {
-			const regex = new RegExp(`^${wildcardPattern.wildcardPattern}$`);
-			// Filter the object entries based on the wildcard pattern
-			const filtered = Object.entries(obj)
-				.filter(([key]) => regex.test(key))
-				.reduce(
-					(obj, [key, value]) => {
-						obj[key] = value;
-						return obj;
-					},
-					{} as Record<string, unknown>,
+			if (arrayMatch) {
+				if (!Array.isArray(current)) return undefined;
+				current = current.find(
+					(item) => this.isRecord(item) && item[arrayMatch.key] === arrayMatch.value,
 				);
-			return filtered as T;
-		}
-
-		// Special case: if the first pattern is an array match
-		const firstPattern = this.patterns[0];
-		if (firstPattern?.type === "arrayMatch") {
-			const baseKey = this.basePath[0];
-			const entries = obj[baseKey];
-			if (!Array.isArray(entries)) return undefined;
-
-			const matchedItem = (entries as Record<string, unknown>[]).find(
-				(item) => item[firstPattern.key] === firstPattern.value,
-			);
-
-			if (!matchedItem) return undefined;
-
-			// Handle remaining path after array pattern
-			const remainingPath = this.basePath.slice(firstPattern.level + 1);
-			if (remainingPath.length > 0) {
-				let result: unknown = matchedItem;
-				for (const key of remainingPath) {
-					if (!result || typeof result !== "object") return undefined;
-					result = (result as Record<string, unknown>)[key];
+			} else if (wildcard) {
+				if (index !== this.path.length - 1 || !this.isRecord(current)) {
+					return undefined;
 				}
-				return result as T;
+				const filtered: Record<string, unknown> = {};
+				for (const [key, entry] of Object.entries(current)) {
+					if (wildcard.test(key)) filtered[key] = entry;
+				}
+				current = filtered;
+			} else {
+				if (!this.isRecord(current)) return undefined;
+				current = current[segment];
 			}
 
-			return matchedItem as T;
-		}
-
-		// Handle regular nested paths
-		for (let i = 0; i < this.basePath.length; i++) {
-			if (!current) return undefined;
-			current = (current as Record<string, unknown>)[this.basePath[i]];
+			if (current === undefined) return undefined;
 		}
 
 		return current as T;
@@ -544,85 +425,116 @@ export class NamespacedSettings<
 		obj: Record<string, unknown>,
 		value: T,
 	): Record<string, unknown> {
-		const result = { ...obj };
+		return this.setPathValue(obj, 0, value) as Record<string, unknown>;
+	}
 
-		// Handle array pattern matching
-		const arrayPattern = this.patterns.find(
-			(p): p is ArrayMatchPattern => p.type === "arrayMatch",
-		);
-		if (arrayPattern) {
-			const baseKey = this.basePath[0];
-			if (!result[baseKey]) {
-				result[baseKey] = [];
-			}
-			const entries = result[baseKey] as Record<string, unknown>[];
+	private setPathValue(current: unknown, index: number, value: unknown): unknown {
+		if (index === this.path.length) return value;
 
-			const index = entries.findIndex(
-				(item) => item[arrayPattern.key] === arrayPattern.value,
+		const segment = this.path[index];
+		const arrayMatch = this.parseArrayMatch(segment);
+		const wildcard = this.parseWildcard(segment);
+
+		if (arrayMatch) {
+			const entries = Array.isArray(current) ? [...current] : [];
+			const matchIndex = entries.findIndex(
+				(item) => this.isRecord(item) && item[arrayMatch.key] === arrayMatch.value,
 			);
+			const existing = matchIndex >= 0 && this.isRecord(entries[matchIndex])
+				? entries[matchIndex]
+				: { [arrayMatch.key]: arrayMatch.value };
+			let updated = index === this.path.length - 1 && this.isRecord(value)
+				? { ...existing, ...value }
+				: this.setPathValue(existing, index + 1, value);
+			if (this.isRecord(updated)) {
+				updated = { ...updated, [arrayMatch.key]: arrayMatch.value };
+			}
+			if (matchIndex >= 0) entries[matchIndex] = updated;
+			else entries.push(updated);
+			return entries;
+		}
 
-			// Get the remaining path after the array pattern
-			const remainingPath = this.basePath.slice(arrayPattern.level + 1);
-
-			if (index >= 0) {
-				// Update existing item
-				if (remainingPath.length > 0) {
-					// Handle nested properties in array item
-					let current = entries[index];
-					for (let i = 0; i < remainingPath.length - 1; i++) {
-						const key = remainingPath[i];
-						current[key] = current[key] || {};
-						current = current[key] as Record<string, unknown>;
-					}
-					const lastKey = remainingPath[remainingPath.length - 1];
-					current[lastKey] = value;
-				} else {
-					// Update root level of array item
-					entries[index] = {
-						...entries[index],
-						...value,
-						[arrayPattern.key]: arrayPattern.value,
-					};
-				}
-			} else {
-				// Add new item
-				if (remainingPath.length > 0) {
-					// Handle nested properties in new array item
-					const newItem: Record<string, unknown> = {
-						[arrayPattern.key]: arrayPattern.value,
-					};
-					let current: Record<string, unknown> = newItem;
-					for (let i = 0; i < remainingPath.length - 1; i++) {
-						const key = remainingPath[i];
-						current[key] = {};
-						current = current[key] as Record<string, unknown>;
-					}
-					const lastKey = remainingPath[remainingPath.length - 1];
-					current[lastKey] = value;
-					entries.push(newItem);
-				} else {
-					// Add new item at root level
-					entries.push({
-						...value,
-						[arrayPattern.key]: arrayPattern.value,
-					});
-				}
+		if (wildcard) {
+			if (index !== this.path.length - 1 || !this.isRecord(value)) {
+				throw new SettingsError("Wildcard paths must be terminal object paths", this.getPath());
+			}
+			const result = this.isRecord(current) ? { ...current } : {};
+			for (const [key, entry] of Object.entries(value)) {
+				if (wildcard.test(key)) result[key] = entry;
 			}
 			return result;
 		}
 
-		// Handle regular nested paths
-		let current: Record<string, unknown> = result;
-		for (let i = 0; i < this.basePath.length - 1; i++) {
-			const baseKey = this.basePath[i];
-			current[baseKey] = current[baseKey] || {};
-			current = current[baseKey] as Record<string, unknown>;
+		const result = this.isRecord(current) ? { ...current } : {};
+		result[segment] = this.setPathValue(result[segment], index + 1, value);
+		return result;
+	}
+
+	private deletePathValue(current: unknown, index: number): [unknown, boolean] {
+		if (index >= this.path.length) return [current, false];
+
+		const segment = this.path[index];
+		const arrayMatch = this.parseArrayMatch(segment);
+		const wildcard = this.parseWildcard(segment);
+
+		if (arrayMatch) {
+			if (!Array.isArray(current)) return [current, false];
+			if (index === this.path.length - 1) {
+				const filtered = current.filter(
+					(item) => !this.isRecord(item) || item[arrayMatch.key] !== arrayMatch.value,
+				);
+				return [filtered, filtered.length !== current.length];
+			}
+			const matchIndex = current.findIndex(
+				(item) => this.isRecord(item) && item[arrayMatch.key] === arrayMatch.value,
+			);
+			if (matchIndex < 0) return [current, false];
+			const [updated, changed] = this.deletePathValue(current[matchIndex], index + 1);
+			if (!changed) return [current, false];
+			const entries = [...current];
+			entries[matchIndex] = updated;
+			return [entries, true];
 		}
 
-		const lastKey = this.basePath[this.basePath.length - 1];
-		current[lastKey] = value;
+		if (wildcard) {
+			if (index !== this.path.length - 1 || !this.isRecord(current)) {
+				return [current, false];
+			}
+			const result = { ...current };
+			let changed = false;
+			for (const key of Object.keys(result)) {
+				if (wildcard.test(key)) {
+					delete result[key];
+					changed = true;
+				}
+			}
+			return [result, changed];
+		}
 
-		return result;
+		if (!this.isRecord(current) || !(segment in current)) return [current, false];
+		const result = { ...current };
+		if (index === this.path.length - 1) {
+			delete result[segment];
+			return [result, true];
+		}
+		const [updated, changed] = this.deletePathValue(result[segment], index + 1);
+		if (!changed) return [current, false];
+		result[segment] = updated;
+		return [result, true];
+	}
+
+	private parseArrayMatch(segment: string): { key: string; value: string } | undefined {
+		const match = segment.match(/^\[(\w+)=(.+)\]$/);
+		return match ? { key: match[1], value: match[2] } : undefined;
+	}
+
+	private parseWildcard(segment: string): RegExp | undefined {
+		const match = segment.match(/^\((.+?)\)$/);
+		return match ? new RegExp(`^${this.createPatternRegex(match[1])}$`) : undefined;
+	}
+
+	private isRecord(value: unknown): value is Record<string, unknown> {
+		return typeof value === "object" && value !== null && !Array.isArray(value);
 	}
 
 	getParent(): NamespacedSettings<Parent> {
@@ -645,7 +557,7 @@ export class NamespacedSettings<
 		if (factory) {
 			return factory(this.settings, fullPath);
 		}
-		this.log("getChild", this.path, childPath, fullPath, this.patterns);
+		this.log("getChild", this.path, childPath, fullPath);
 		return new NamespacedSettings<C>(this.settings, fullPath) as R;
 	}
 
@@ -668,42 +580,8 @@ export class NamespacedSettings<
 		}
 
 		await this.settings.update((data) => {
-			const result = { ...data };
-
-			// Handle array pattern matching
-			const arrayPattern = this.patterns.find(
-				(p): p is ArrayMatchPattern => p.type === "arrayMatch",
-			);
-
-			if (arrayPattern) {
-				const baseKey = this.basePath[0];
-				const entries = result[baseKey];
-				if (Array.isArray(entries)) {
-					const filtered = (entries as Record<string, unknown>[]).filter(
-						(item) => item[arrayPattern.key] !== arrayPattern.value,
-					);
-					result[baseKey] = filtered;
-
-					if (filtered.length === 0) {
-						delete result[baseKey];
-					}
-				}
-				return result;
-			}
-
-			// Handle regular paths
-			let current = result;
-			const keys = this.basePath.slice(0, -1);
-
-			for (const key of keys) {
-				if (!current[key]) return result;
-				current = current[key] as Record<string, unknown>;
-			}
-
-			const lastKey = this.basePath[this.basePath.length - 1];
-			delete current[lastKey];
-
-			return result;
+			const [updated, changed] = this.deletePathValue(data, 0);
+			return changed ? updated as Record<string, unknown> : data;
 		});
 	}
 

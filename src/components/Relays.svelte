@@ -174,13 +174,13 @@
 <SettingItemHeading name="Join a relay"></SettingItemHeading>
 <SettingGroup>
 	<SettingItem
-		name="Share key"
+		name="Invitation code"
 		description="Enter the code that was shared with you."
 	>
 		<SecretText
 			bind:value={shareKey}
 			disabled={invitePending}
-			placeholder="Enter share key"
+			placeholder="Enter invitation code"
 			name="share-key"
 			readonly={false}
 			copyOnClick={false}
@@ -203,7 +203,7 @@
 	helpText="A relay coordinates real-time updates between collaborators. You can add collaborators and share folders on the relay's settings page."
 >
 	<span slot="name" style="display: inline-flex; align-items: center">
-		relays
+		Relays
 	</span>
 </SettingItemHeading>
 <SettingGroup>
@@ -289,8 +289,5 @@
 <style>
 	span.faint {
 		color: var(--text-faint);
-	}
-	div.spacer {
-		height: 3em;
 	}
 </style>

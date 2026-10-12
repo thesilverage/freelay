@@ -210,10 +210,11 @@
 		deletingRemote = true;
 		try {
 			await plugin.relayManager.deleteRemote(remoteFolder);
-			if ($folderStore) {
-				$folderStore.remote = undefined;
+			const localFolder = $folderStore;
+			if (localFolder) {
+				localFolder.remote = undefined;
 				plugin.sharedFolders.notifyListeners();
-				dispatch("manageSharedFolder", { folder: $folderStore });
+				dispatch("manageSharedFolder", { folder: localFolder });
 				return;
 			}
 		} catch (error) {
@@ -610,15 +611,20 @@
 					name="Remove from relay"
 					description="Irreversible. Stops new access now; server data is collected after the safety delay. Local files are preserved."
 				>
-					<label><input type="checkbox" bind:checked={confirmRemoteDeletion} /> Permanently delete this shared folder from the server</label>
-					<button
-						class="mod-destructive"
-						disabled={deletingRemote || !confirmRemoteDeletion}
-						aria-busy={deletingRemote}
-						on:click={handleDeleteRemote}
-					>
-						Delete shared folder
-					</button>
+					<div class="confirmation-controls">
+						<label class="confirmation">
+							<input type="checkbox" bind:checked={confirmRemoteDeletion} />
+							<span>Permanently delete this shared folder from the server.</span>
+						</label>
+						<button
+							class="mod-destructive"
+							disabled={deletingRemote || !confirmRemoteDeletion}
+							aria-busy={deletingRemote}
+							on:click={handleDeleteRemote}
+						>
+							Delete shared folder
+						</button>
+					</div>
 				</SettingItem>
 			{/if}
 		{/if}
@@ -679,6 +685,30 @@
 	.edit-members-button:focus {
 		outline: none;
 		color: var(--icon-color-focus);
+	}
+
+	.confirmation {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--size-4-2);
+		max-width: 24rem;
+		color: var(--text-muted);
+		font-size: var(--font-ui-smaller);
+		line-height: var(--line-height-tight);
+		white-space: normal;
+	}
+
+	.confirmation-controls {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: var(--size-4-2);
+		max-width: 100%;
+	}
+
+	.confirmation input {
+		flex: none;
+		margin-top: 0.15em;
 	}
 
 	/* Fix for invisible text in disabled dropdown */

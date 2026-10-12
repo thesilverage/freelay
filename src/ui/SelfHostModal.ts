@@ -13,7 +13,7 @@ export class SelfHostModal extends Modal {
 		private onSuccess: (relay: Relay) => void,
 	) {
 		super(app);
-		this.setTitle("Self host relay server");
+		this.setTitle("Create a relay");
 	}
 
 	onOpen() {

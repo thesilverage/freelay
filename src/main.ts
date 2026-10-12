@@ -959,9 +959,7 @@ export default class Live extends Plugin {
 			3, // concurrency
 		);
 
-		if (!this.loginManager.setup()) {
-			new Notice("Please sign in to use relay");
-		}
+		this.loginManager.setup();
 
 		this.app.workspace.onLayoutReady(() => {
 			if (this._unloading) return;

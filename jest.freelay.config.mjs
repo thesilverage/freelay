@@ -2,5 +2,6 @@
 export default {
 	testMatch: ["<rootDir>/tests/freelay/**/*.test.ts"],
 	testEnvironment: "node",
+	setupFiles: ["<rootDir>/tests/freelay/setup.mjs"],
 	transform: {"\\.ts$": ["ts-jest", {isolatedModules: true, tsconfig: {target: "ES2022", module: "CommonJS", verbatimModuleSyntax: false, resolveJsonModule: true}}]},
 };
